@@ -1,0 +1,7 @@
+/target/
+/.idea/
+*.iml
+release.properties
+pom.xml.releaseBackup
+pom.xml.branch
+pom.xml.next

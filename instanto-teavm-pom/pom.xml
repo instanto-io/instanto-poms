@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.instanto</groupId>
+    <artifactId>instanto-org-pom</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <relativePath>../pom.xml</relativePath>
+  </parent>
+
+  <artifactId>instanto-teavm-pom</artifactId>
+  <packaging>pom</packaging>
+  <name>Instanto TeaVM Parent</name>
+  <description>One TeaVM version, dependency set and plugin pin for Instanto projects that compile to the browser.</description>
+
+  <!-- ── Role ────────────────────────────────────────────────────────────
+       The TeaVM layer for projects that compile Java to JavaScript or WebAssembly.
+       It adds TeaVM and nothing else; everything an ordinary Instanto Java build
+       needs still arrives from instanto-org-pom above it.
+
+       Provides  The teavm.version property; managed versions for every
+                 org.teavm artifact the organisation uses, so a module can
+                 declare them without a <version>; a pluginManagement pin for
+                 teavm-maven-plugin.
+       Requires  Nothing.
+       Not here  TeaVM build configuration. Targets, optimisation level and
+                 output directory belong to each application parent, which
+                 knows what it is producing.
+
+       A project that cannot change its parent may import this POM into
+       dependencyManagement with <type>pom</type><scope>import</scope>. An
+       import carries the managed versions only — not the property, and not
+       the plugin pin.
+  -->
+
+  <properties>
+    <teavm.version>0.15.0</teavm.version>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <!-- Portable runtime: compiled against by code that targets the browser. -->
+      <dependency>
+        <groupId>org.teavm</groupId>
+        <artifactId>teavm-classlib</artifactId>
+        <version>${teavm.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.teavm</groupId>
+        <artifactId>teavm-jso</artifactId>
+        <version>${teavm.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.teavm</groupId>
+        <artifactId>teavm-jso-apis</artifactId>
+        <version>${teavm.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.teavm</groupId>
+        <artifactId>teavm-interop</artifactId>
+        <version>${teavm.version}</version>
+      </dependency>
+
+      <!-- Compiler and tooling: needed by code that drives a TeaVM build. -->
+      <dependency>
+        <groupId>org.teavm</groupId>
+        <artifactId>teavm-core</artifactId>
+        <version>${teavm.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.teavm</groupId>
+        <artifactId>teavm-tooling</artifactId>
+        <version>${teavm.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.teavm</groupId>
+        <artifactId>teavm-devserver</artifactId>
+        <version>${teavm.version}</version>
+      </dependency>
+
+      <!-- Metaprogramming and compiler extensions. These are compile-time only:
+           declare them provided so they stay off a consumer's runtime classpath. -->
+      <dependency>
+        <groupId>org.teavm</groupId>
+        <artifactId>teavm-metaprogramming-api</artifactId>
+        <version>${teavm.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.teavm</groupId>
+        <artifactId>teavm-extension-spi</artifactId>
+        <version>${teavm.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.teavm</groupId>
+        <artifactId>teavm-extension-apis</artifactId>
+        <version>${teavm.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.teavm</groupId>
+        <artifactId>teavm-extension-annotation-processor</artifactId>
+        <version>${teavm.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.teavm</groupId>
+        <artifactId>teavm-relocated-libs-asm</artifactId>
+        <version>${teavm.version}</version>
+      </dependency>
+
+      <!-- Extras -->
+      <dependency>
+        <groupId>org.teavm</groupId>
+        <artifactId>teavm-extras-slf4j</artifactId>
+        <version>${teavm.version}</version>
+      </dependency>
+
+      <!-- Test -->
+      <dependency>
+        <groupId>org.teavm</groupId>
+        <artifactId>teavm-junit</artifactId>
+        <version>${teavm.version}</version>
+        <scope>test</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <build>
+    <pluginManagement>
+      <plugins>
+        <!-- Version only. Each application parent configures its own targets,
+             optimisation level and output directory. -->
+        <plugin>
+          <groupId>org.teavm</groupId>
+          <artifactId>teavm-maven-plugin</artifactId>
+          <version>${teavm.version}</version>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+  </build>
+</project>

@@ -5,3 +5,4 @@ release.properties
 pom.xml.releaseBackup
 pom.xml.branch
 pom.xml.next
+target/

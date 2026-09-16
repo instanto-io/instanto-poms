@@ -9,6 +9,31 @@
   <packaging>pom</packaging>
   <name>Instanto Organisation Parent</name>
   <description>Shared Maven build and release settings for Instanto libraries and applications.</description>
+
+  <!-- ── Role ────────────────────────────────────────────────────────────
+       The root build contract for every Instanto project, whatever it compiles to.
+       Everything here applies equally to a browser library, a server service and
+       a plain JVM utility.
+
+       Provides  Java 21 and UTF-8 defaults; pinned versions for the standard
+                 Maven plugins; source and Javadoc archives attached to every
+                 build including snapshots; Spotless formatting and SpotBugs
+                 reporting on every module; the release, sign-release and
+                 central profiles.
+
+       Publishing  Snapshots go to the organisation's GitHub Packages. A
+                 release goes to both Maven Central and GitHub Packages:
+                 distributionManagement in each repository carries the Packages
+                 destination, and the central profile adds Central on top.
+
+                     mvn deploy                              snapshot
+                     mvn -P release,sign-release,central deploy
+       Requires  Nothing. A project inherits this POM and builds.
+       Supplies  Each repository declares its own SCM, distributionManagement
+        itself  and repositories. They are deliberately absent here.
+       Not here  Library dependencies, BOM imports, and anything specific to a
+                 toolchain. TeaVM lives in instanto-teavm-pom.
+  -->
   <url>https://instanto.io</url>
   <organization>
     <name>Instanto</name>
@@ -21,6 +46,12 @@
       <distribution>repo</distribution>
     </license>
   </licenses>
+
+  <!-- Parents published from this repository. This POM stays platform-neutral;
+       anything tied to a particular toolchain lives in a module beside it. -->
+  <modules>
+    <module>instanto-teavm-pom</module>
+  </modules>
 
   <!-- Each repository supplies its own SCM and publication destinations. -->
   <properties>
@@ -40,6 +71,9 @@
     <maven-gpg-plugin.version>3.2.8</maven-gpg-plugin.version>
     <spotless.version>2.43.0</spotless.version>
     <google-java-format.version>1.35.0</google-java-format.version>
+    <spotbugs-maven-plugin.version>4.10.3.0</spotbugs-maven-plugin.version>
+    <maven-antrun-plugin.version>3.2.0</maven-antrun-plugin.version>
+    <central-publishing-maven-plugin.version>0.11.0</central-publishing-maven-plugin.version>
   </properties>
 
   <!-- No library dependencies or BOM imports belong in this parent. -->
@@ -84,6 +118,12 @@
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-javadoc-plugin</artifactId>
           <version>${maven-javadoc-plugin.version}</version>
+          <configuration>
+            <!-- Javadoc runs on every module, including GWT stubs, classlib overrides and
+                 generated code that were never written for it. Attach the jar without
+                 letting comment style fail the build. -->
+            <doclint>none</doclint>
+          </configuration>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
@@ -142,8 +182,100 @@
             </execution>
           </executions>
         </plugin>
+        <plugin>
+          <groupId>org.sonatype.central</groupId>
+          <artifactId>central-publishing-maven-plugin</artifactId>
+          <version>${central-publishing-maven-plugin.version}</version>
+        </plugin>
+        <plugin>
+          <groupId>com.github.spotbugs</groupId>
+          <artifactId>spotbugs-maven-plugin</artifactId>
+          <version>${spotbugs-maven-plugin.version}</version>
+          <configuration>
+            <effort>Max</effort>
+            <threshold>Low</threshold>
+            <xmlOutput>true</xmlOutput>
+            <spotbugsXmlOutputDirectory>${project.build.directory}/spotbugs</spotbugsXmlOutputDirectory>
+            <spotbugsXmlOutputFilename>${project.artifactId}-spotbugs.xml</spotbugsXmlOutputFilename>
+            <sarifOutput>true</sarifOutput>
+            <sarifOutputDirectory>${project.build.directory}/spotbugs</sarifOutputDirectory>
+            <sarifOutputFilename>${project.artifactId}-spotbugs.sarif</sarifOutputFilename>
+            <htmlOutput>true</htmlOutput>
+            <outputDirectory>${project.build.directory}/spotbugs</outputDirectory>
+            <failOnError>true</failOnError>
+          </configuration>
+          <executions>
+            <execution>
+              <id>spotbugs-report</id>
+              <phase>process-classes</phase>
+              <goals><goal>spotbugs</goal></goals>
+            </execution>
+          </executions>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-antrun-plugin</artifactId>
+          <version>${maven-antrun-plugin.version}</version>
+          <executions>
+            <execution>
+              <!-- SpotBugs always writes spotbugs.html; give it the module's name
+                   so reports collected from a reactor stay distinguishable. -->
+              <id>name-spotbugs-html-report</id>
+              <phase>process-classes</phase>
+              <goals><goal>run</goal></goals>
+              <configuration>
+                <target>
+                  <move todir="${project.build.directory}/spotbugs">
+                    <fileset dir="${project.build.directory}/spotbugs" includes="spotbugs.html" erroronmissingdir="false"/>
+                    <globmapper from="spotbugs.html" to="${project.artifactId}-spotbugs.html"/>
+                  </move>
+                </target>
+              </configuration>
+            </execution>
+          </executions>
+        </plugin>
       </plugins>
     </pluginManagement>
+    <!-- Formatting and static analysis run for every Instanto build, whatever
+         the project's toolchain. SpotBugs reports; it does not fail on findings.
+         Sources and javadoc are attached for every build, snapshot included.
+         Only signing is gated, by the sign-release profile. -->
+    <plugins>
+      <plugin>
+        <groupId>com.diffplug.spotless</groupId>
+        <artifactId>spotless-maven-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>com.github.spotbugs</groupId>
+        <artifactId>spotbugs-maven-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-antrun-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-source-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>attach-sources</id>
+            <phase>package</phase>
+            <goals><goal>jar-no-fork</goal></goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-javadoc-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>attach-javadocs</id>
+            <phase>package</phase>
+            <goals><goal>jar</goal></goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
   </build>
 
   <profiles>
@@ -170,31 +302,29 @@
               </execution>
             </executions>
           </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <!-- Publish to Maven Central in addition to the repository's own GitHub
+         Packages destination. Central requires signatures, so pair it with
+         sign-release. The central server id names the credentials in the
+         local Maven settings. -->
+    <profile>
+      <id>central</id>
+      <build>
+        <plugins>
           <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-source-plugin</artifactId>
-            <executions>
-              <execution>
-                <id>attach-sources</id>
-                <phase>package</phase>
-                <goals><goal>jar-no-fork</goal></goals>
-              </execution>
-            </executions>
-          </plugin>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-javadoc-plugin</artifactId>
-            <executions>
-              <execution>
-                <id>attach-javadocs</id>
-                <phase>package</phase>
-                <goals><goal>jar</goal></goals>
-              </execution>
-            </executions>
+            <groupId>org.sonatype.central</groupId>
+            <artifactId>central-publishing-maven-plugin</artifactId>
+            <extensions>true</extensions>
+            <configuration>
+              <publishingServerId>central</publishingServerId>
+            </configuration>
           </plugin>
         </plugins>
       </build>
     </profile>
+
     <profile>
       <id>sign-release</id>
       <build>

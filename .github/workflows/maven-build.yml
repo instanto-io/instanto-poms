@@ -1,0 +1,95 @@
+name: Maven build
+
+# Shared Maven job for Instanto repositories.
+#
+# It checks out the repository, installs whichever shared parents the build
+# needs, and runs Maven. Callers supply only what differs from the defaults.
+#
+# Runners default to the self-hosted pool. Pass runner-labels to send a job
+# somewhere else — the JavaFX platform artifacts, for example, need hosted
+# Windows and arm64 machines.
+
+on:
+  workflow_call:
+    inputs:
+      runner-labels:
+        description: Runner labels, as a JSON array. Defaults to the self-hosted pool.
+        type: string
+        default: '["self-hosted"]'
+      java-version:
+        description: Temurin JDK version.
+        type: string
+        default: '21'
+      parents:
+        description: >
+          Shared parents to install before the build, one per line as
+          "<owner/repo> <pom path>". Order matters.
+        type: string
+        default: instanto-io/instanto-poms pom.xml
+      goals:
+        description: Maven goals and phases for the build step.
+        type: string
+        default: clean verify
+      maven-args:
+        description: Extra Maven arguments, such as -pl or -P.
+        type: string
+        default: ''
+      settings:
+        description: Maven settings file, relative to the repository root.
+        type: string
+        default: .github/maven-settings.xml
+      name:
+        description: Label for the build step, so logs say what ran.
+        type: string
+        default: Verify Maven modules
+    secrets:
+      PACKAGES_TOKEN:
+        description: Token with read access to the organisation's packages and parent repositories.
+        required: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ inputs.java-version }}
+          cache: maven
+
+      - name: Install shared parents
+        if: inputs.parents != ''
+        env:
+          PARENTS: ${{ inputs.parents }}
+          GH_TOKEN: ${{ secrets.PACKAGES_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$PARENTS" | while read -r repo pom; do
+            [ -n "$repo" ] || continue
+            dir=".build/$(basename "$repo")"
+            if [ ! -d "$dir" ]; then
+              git clone --quiet --depth 1 \
+                "https://x-access-token:${GH_TOKEN}@github.com/${repo}.git" "$dir"
+            fi
+            echo "Installing ${repo}/${pom}"
+            mvn -B -ntp -f "${dir}/${pom}" install -DskipTests
+          done
+
+      - name: ${{ inputs.name }}
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          runner=./mvnw
+          [ -x "$runner" ] || runner=mvn
+          "$runner" --settings '${{ inputs.settings }}' \
+            --batch-mode --errors --fail-at-end \
+            ${{ inputs.maven-args }} ${{ inputs.goals }}

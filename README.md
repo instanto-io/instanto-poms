@@ -44,6 +44,50 @@ instanto-org-pom                   Every Instanto project
     └── drone-poc-components
 ```
 
+## Shared CI
+
+`.github/workflows/maven-build.yml` is a reusable workflow that checks out the
+repository, installs the shared parents and runs Maven. Jobs run on the
+self-hosted pool unless a caller says otherwise.
+
+```yaml
+jobs:
+  verify:
+    uses: instanto-io/instanto-poms/.github/workflows/maven-build.yml@main
+    with:
+      name: Verify modules
+    secrets:
+      PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
+```
+
+A build that needs a platform the self-hosted pool does not have — the JavaFX
+artifacts for Windows and arm64, for instance — passes hosted labels instead:
+
+```yaml
+  javafx:
+    strategy:
+      matrix:
+        include:
+          - target: windows-x64
+            labels: '["windows-2022"]'
+          - target: linux-arm64
+            labels: '["ubuntu-24.04-arm"]'
+    uses: instanto-io/instanto-poms/.github/workflows/maven-build.yml@main
+    with:
+      runner-labels: ${{ matrix.labels }}
+      maven-args: -P javafx-${{ matrix.target }}
+```
+
+Inputs: `runner-labels`, `java-version`, `parents`, `goals`, `maven-args`,
+`settings`, `name`. A build needing a second parent, such as the Sarto library
+parent, lists it:
+
+```yaml
+      parents: |
+        instanto-io/instanto-poms pom.xml
+        instanto-io/sarto-poms sarto-library-pom/pom.xml
+```
+
 ## Publishing
 
 Snapshots go to the organisation's GitHub Packages. A release goes to both

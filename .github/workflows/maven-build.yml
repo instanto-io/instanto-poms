@@ -65,12 +65,15 @@ jobs:
       MAVEN_TOKEN: ${{ secrets.PACKAGES_TOKEN || github.token }}
       MAVEN_ACTOR: ${{ github.actor }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-java@v4
+      # overwrite-settings is off because self-hosted runners keep their home
+      # directory between jobs; credentials go to a job-local file instead.
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: ${{ inputs.java-version }}
+          overwrite-settings: false
 
       - name: Make Maven available
         env:
@@ -119,9 +122,11 @@ jobs:
           printf '%s\n' "$PARENTS" | while read -r repo pom; do
             [ -n "$repo" ] || continue
             dir="$RUNNER_TEMP/parents/$(basename "$repo")"
-            rm -rf "$dir"
-            git clone --quiet --depth 1 "https://github.com/${repo}.git" "$dir" 2>/dev/null \
-              || git clone --quiet --depth 1 "https://x-access-token:${MAVEN_TOKEN}@github.com/${repo}.git" "$dir"
+            rm -rf "$dir" && mkdir -p "$dir"
+            # A tarball rather than git, which not every self-hosted runner has.
+            curl -fsSL -H "Authorization: Bearer ${MAVEN_TOKEN}" \
+              "https://api.github.com/repos/${repo}/tarball" \
+              | tar -xz --strip-components=1 -C "$dir"
             echo "Installing ${repo}/${pom}"
             "$MVN" -B -ntp --settings "$MAVEN_SETTINGS" -f "${dir}/${pom}" install -DskipTests
           done

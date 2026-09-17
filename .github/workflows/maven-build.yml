@@ -3,11 +3,18 @@ name: Maven build
 # Shared Maven job for Instanto repositories.
 #
 # It checks out the repository, installs whichever shared parents the build
-# needs, and runs Maven. Callers supply only what differs from the defaults.
+# needs, writes Maven credentials for every GitHub Packages repository the
+# build declares, and runs Maven. Callers supply only what differs from the
+# defaults.
 #
-# Runners default to the self-hosted pool. Pass runner-labels to send a job
-# somewhere else — the JavaFX platform artifacts, for example, need hosted
-# Windows and arm64 machines.
+# Runners default to the organisation's self-hosted pool. Pass runner-labels to
+# send a job somewhere else — the JavaFX platform artifacts, for example, need
+# hosted Windows and arm64 machines.
+#
+# Credentials: PACKAGES_TOKEN when the caller passes it, otherwise the job's own
+# GITHUB_TOKEN. Every <repository> and <distributionManagement> id beginning
+# with "github" in the repository's POMs gets a server entry, so a repository
+# does not need to keep its own settings file.
 
 on:
   workflow_call:
@@ -20,6 +27,10 @@ on:
         description: Temurin JDK version.
         type: string
         default: '21'
+      maven-version:
+        description: Maven version to install when the repository has no wrapper and the runner has no Maven.
+        type: string
+        default: 3.9.16
       parents:
         description: >
           Shared parents to install before the build, one per line as
@@ -34,17 +45,13 @@ on:
         description: Extra Maven arguments, such as -pl or -P.
         type: string
         default: ''
-      settings:
-        description: Maven settings file, relative to the repository root.
-        type: string
-        default: .github/maven-settings.xml
       name:
         description: Label for the build step, so logs say what ran.
         type: string
         default: Verify Maven modules
     secrets:
       PACKAGES_TOKEN:
-        description: Token with read access to the organisation's packages and parent repositories.
+        description: Token with read access to the organisation's private packages and repositories.
         required: false
 
 permissions:
@@ -54,6 +61,9 @@ permissions:
 jobs:
   build:
     runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    env:
+      MAVEN_TOKEN: ${{ secrets.PACKAGES_TOKEN || github.token }}
+      MAVEN_ACTOR: ${{ github.actor }}
     steps:
       - uses: actions/checkout@v4
 
@@ -61,35 +71,63 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ inputs.java-version }}
-          cache: maven
+
+      - name: Make Maven available
+        env:
+          MAVEN_VERSION: ${{ inputs.maven-version }}
+        run: |
+          set -euo pipefail
+          if [ -x ./mvnw ]; then
+            echo "MVN=$PWD/mvnw" >> "$GITHUB_ENV"
+          elif command -v mvn >/dev/null 2>&1; then
+            echo "MVN=$(command -v mvn)" >> "$GITHUB_ENV"
+          else
+            home="${RUNNER_TOOL_CACHE:-$RUNNER_TEMP}/maven/${MAVEN_VERSION}"
+            if [ ! -x "$home/bin/mvn" ]; then
+              mkdir -p "$home"
+              curl -fsSL "https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/${MAVEN_VERSION}/apache-maven-${MAVEN_VERSION}-bin.tar.gz" \
+                | tar -xz --strip-components=1 -C "$home"
+            fi
+            echo "$home/bin" >> "$GITHUB_PATH"
+            echo "MVN=$home/bin/mvn" >> "$GITHUB_ENV"
+          fi
+
+      - name: Write Maven credentials
+        run: |
+          set -euo pipefail
+          settings="$RUNNER_TEMP/maven-settings.xml"
+          ids=$( { find . -name pom.xml -not -path '*/target/*' -print0 \
+                   | xargs -0 grep -hoE '<id>github[A-Za-z0-9._-]*</id>' || true; } \
+                 | sed -E 's#</?id>##g' | sort -u)
+          ids=$(printf '%s\ngithub\n' "$ids" | sed '/^$/d' | sort -u)
+          {
+            echo '<settings><servers>'
+            for id in $ids; do
+              echo "  <server><id>${id}</id><username>\${env.MAVEN_ACTOR}</username><password>\${env.MAVEN_TOKEN}</password></server>"
+            done
+            echo '</servers></settings>'
+          } > "$settings"
+          echo "MAVEN_SETTINGS=$settings" >> "$GITHUB_ENV"
+          echo "Credentials written for: $(echo $ids | tr '\n' ' ')"
 
       - name: Install shared parents
         if: inputs.parents != ''
         env:
           PARENTS: ${{ inputs.parents }}
-          GH_TOKEN: ${{ secrets.PACKAGES_TOKEN || github.token }}
         run: |
           set -euo pipefail
           printf '%s\n' "$PARENTS" | while read -r repo pom; do
             [ -n "$repo" ] || continue
-            dir=".build/$(basename "$repo")"
-            if [ ! -d "$dir" ]; then
-              git clone --quiet --depth 1 \
-                "https://x-access-token:${GH_TOKEN}@github.com/${repo}.git" "$dir"
-            fi
+            dir="$RUNNER_TEMP/parents/$(basename "$repo")"
+            rm -rf "$dir"
+            git clone --quiet --depth 1 "https://github.com/${repo}.git" "$dir" 2>/dev/null \
+              || git clone --quiet --depth 1 "https://x-access-token:${MAVEN_TOKEN}@github.com/${repo}.git" "$dir"
             echo "Installing ${repo}/${pom}"
-            mvn -B -ntp -f "${dir}/${pom}" install -DskipTests
+            "$MVN" -B -ntp --settings "$MAVEN_SETTINGS" -f "${dir}/${pom}" install -DskipTests
           done
 
       - name: ${{ inputs.name }}
-        env:
-          GITHUB_ACTOR: ${{ github.actor }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          runner=./mvnw
-          [ -x "$runner" ] || runner=mvn
-          "$runner" --settings '${{ inputs.settings }}' \
-            --batch-mode --errors --fail-at-end \
+          "$MVN" --settings "$MAVEN_SETTINGS" --batch-mode --no-transfer-progress --errors --fail-at-end \
             ${{ inputs.maven-args }} ${{ inputs.goals }}

@@ -45,6 +45,10 @@ on:
         description: Extra Maven arguments, such as -pl or -P.
         type: string
         default: ''
+      timeout-minutes:
+        description: Time limit for the job, so a hung browser cannot hold a runner indefinitely.
+        type: number
+        default: 30
       name:
         description: Label for the build step, so logs say what ran.
         type: string
@@ -61,10 +65,21 @@ permissions:
 jobs:
   build:
     runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
     env:
       MAVEN_TOKEN: ${{ secrets.PACKAGES_TOKEN || github.token }}
       MAVEN_ACTOR: ${{ github.actor }}
     steps:
+      # Self-hosted machines are provisioned by hand and differ; record what
+      # this one offers so a failure caused by the machine is visible as such.
+      - name: Describe runner
+        run: |
+          echo "runner: ${RUNNER_NAME} (${RUNNER_OS} ${RUNNER_ARCH})"
+          echo "display: ${DISPLAY:-none}"
+          for tool in git curl tar mvn google-chrome google-chrome-stable chromium chromium-browser firefox xvfb-run; do
+            printf '  %-22s %s\n' "$tool" "$(command -v "$tool" || echo missing)"
+          done
+
       - uses: actions/checkout@v7
 
       # overwrite-settings is off because self-hosted runners keep their home

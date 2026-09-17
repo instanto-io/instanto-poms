@@ -7,7 +7,8 @@ name: Maven build
 # build declares, and runs Maven. Callers supply only what differs from the
 # defaults.
 #
-# Runners default to the organisation's self-hosted pool. Pass runner-labels to
+# Runners default to the organisation's container runners, which carry the tools
+# these builds need. Pass runner-labels to
 # send a job somewhere else — the JavaFX platform artifacts, for example, need
 # hosted Windows and arm64 machines.
 #
@@ -20,9 +21,9 @@ on:
   workflow_call:
     inputs:
       runner-labels:
-        description: Runner labels, as a JSON array. Defaults to the self-hosted pool.
+        description: Runner labels, as a JSON array. Defaults to the container runners.
         type: string
-        default: '["self-hosted"]'
+        default: '["self-hosted", "instanto-container"]'
       java-version:
         description: Temurin JDK version.
         type: string

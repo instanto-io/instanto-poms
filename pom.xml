@@ -121,8 +121,10 @@
           <configuration>
             <!-- Javadoc runs on every module, including GWT stubs, classlib overrides and
                  generated code that were never written for it. Attach the jar without
-                 letting comment style fail the build. -->
+                 letting comment style fail the build. failOnError covers what doclint
+                 does not, such as a {@link} to a class outside the module's classpath. -->
             <doclint>none</doclint>
+            <failOnError>false</failOnError>
           </configuration>
         </plugin>
         <plugin>

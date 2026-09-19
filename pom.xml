@@ -196,6 +196,9 @@
           <configuration>
             <effort>Max</effort>
             <threshold>Low</threshold>
+            <!-- Max effort on a module of a few hundred generated classes exhausts
+                 the analyser's default heap. -->
+            <maxHeap>2048</maxHeap>
             <xmlOutput>true</xmlOutput>
             <spotbugsXmlOutputDirectory>${project.build.directory}/spotbugs</spotbugsXmlOutputDirectory>
             <spotbugsXmlOutputFilename>${project.artifactId}-spotbugs.xml</spotbugsXmlOutputFilename>

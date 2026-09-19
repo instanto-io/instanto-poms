@@ -16,6 +16,10 @@ name: Maven build
 # GITHUB_TOKEN. Every <repository> and <distributionManagement> id beginning
 # with "github" in the repository's POMs gets a server entry, so a repository
 # does not need to keep its own settings file.
+#
+# A caller that publishes to the organisation's own Nexus at artifacts.instanto.io
+# passes ARTIFACTS_USERNAME and ARTIFACTS_TOKEN as well; those become the
+# "artifacts" server.
 
 on:
   workflow_call:
@@ -58,6 +62,12 @@ on:
       PACKAGES_TOKEN:
         description: Token with read access to the organisation's private packages and repositories.
         required: false
+      ARTIFACTS_USERNAME:
+        description: Nexus account at artifacts.instanto.io, for jobs that deploy there.
+        required: false
+      ARTIFACTS_TOKEN:
+        description: Password or token for that Nexus account.
+        required: false
 
 permissions:
   contents: read
@@ -70,6 +80,8 @@ jobs:
     env:
       MAVEN_TOKEN: ${{ secrets.PACKAGES_TOKEN || github.token }}
       MAVEN_ACTOR: ${{ github.actor }}
+      ARTIFACTS_USERNAME: ${{ secrets.ARTIFACTS_USERNAME }}
+      ARTIFACTS_TOKEN: ${{ secrets.ARTIFACTS_TOKEN }}
     steps:
       # Self-hosted machines are provisioned by hand and differ; record what
       # this one offers so a failure caused by the machine is visible as such.
@@ -124,6 +136,12 @@ jobs:
             for id in $ids; do
               echo "  <server><id>${id}</id><username>\${env.MAVEN_ACTOR}</username><password>\${env.MAVEN_TOKEN}</password></server>"
             done
+            # Only when the caller supplied them; a build that does not deploy to
+            # Nexus should not fail for want of an account.
+            if [ -n "${ARTIFACTS_TOKEN:-}" ]; then
+              echo "  <server><id>artifacts</id><username>\${env.ARTIFACTS_USERNAME}</username><password>\${env.ARTIFACTS_TOKEN}</password></server>"
+              echo "artifacts: credentials written" >&2
+            fi
             echo '</servers></settings>'
           } > "$settings"
           echo "MAVEN_SETTINGS=$settings" >> "$GITHUB_ENV"
@@ -144,7 +162,10 @@ jobs:
               "https://api.github.com/repos/${repo}/tarball" \
               | tar -xz --strip-components=1 -C "$dir"
             echo "Installing ${repo}/${pom}"
-            "$MVN" -B -ntp --settings "$MAVEN_SETTINGS" -f "${dir}/${pom}" install -DskipTests
+            # A dependency's own quality gates are its repository's business, and
+            # running them here only slows this build down.
+            "$MVN" -B -ntp --settings "$MAVEN_SETTINGS" -f "${dir}/${pom}" install \
+              -DskipTests -Dspotbugs.skip=true -Dspotless.check.skip=true -Dmaven.javadoc.skip=true
           done
 
       - name: ${{ inputs.name }}

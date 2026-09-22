@@ -6,7 +6,7 @@ detail rather than this file.
 
 | Parent | Role |
 |---|---|
-| `io.instanto:instanto-org-pom` | The build contract for every Instanto project: Java 21, pinned plugin versions, Spotless, SpotBugs, source and Javadoc archives, release profiles. |
+| `io.instanto:instanto-org-pom` | The build contract for every Instanto project: Java 21, pinned plugin versions, Spotless, SpotBugs, source and Javadoc archives, and publication defaults. |
 | `io.instanto:instanto-teavm-pom` | Adds TeaVM for projects that compile to JavaScript or WebAssembly: the `teavm.version` property, managed `org.teavm` versions, and the `teavm-maven-plugin` pin. |
 
 ## Use a parent
@@ -21,7 +21,19 @@ detail rather than this file.
 ```
 
 Name `instanto-teavm-pom` instead when the project targets the browser. Maven
-resolves either from the local cache or a configured package repository.
+resolves either from the local cache or the Forgejo repository declared in the
+consuming project's root POM:
+
+```xml
+<repositories>
+  <repository>
+    <id>forgejo</id>
+    <url>https://packages.instanto.io/api/packages/instanto-io/maven</url>
+    <releases><enabled>false</enabled></releases>
+    <snapshots><enabled>true</enabled></snapshots>
+  </repository>
+</repositories>
+```
 
 A project that cannot change its parent can import `instanto-teavm-pom` into
 `dependencyManagement` with `<type>pom</type><scope>import</scope>`. An import
@@ -30,8 +42,9 @@ the plugin pin.
 
 ## What a project supplies itself
 
-Neither parent declares SCM, `distributionManagement` or `repositories`. Each
-repository sets its own, so a project can be released from more than one place.
+Each repository declares its own SCM metadata. Snapshot distribution and
+dependency resolution use `packages.instanto.io`; release versions use Maven
+Central through the Central Publisher Portal.
 
 ## Hierarchy
 
@@ -47,8 +60,8 @@ instanto-org-pom                   Every Instanto project
 ## Shared CI
 
 `.github/workflows/maven-build.yml` is a reusable workflow that checks out the
-repository, installs the shared parents and runs Maven. Jobs run on the
-self-hosted pool unless a caller says otherwise.
+repository and runs Maven against the published parents and dependencies. Jobs
+run on the self-hosted pool unless a caller says otherwise.
 
 ```yaml
 jobs:
@@ -79,27 +92,24 @@ artifacts for Windows and arm64, for instance — passes hosted labels instead:
 ```
 
 Inputs: `runner-labels`, `java-version`, `parents`, `goals`, `maven-args`,
-`settings`, `name`. A build needing a second parent, such as the Sarto library
-parent, lists it:
+`timeout-minutes`, `name`. `parents` is empty by default; use it only to test an
+unpublished parent source tree explicitly.
 
 ```yaml
-      parents: |
-        instanto-io/instanto-poms pom.xml
-        instanto-io/sarto-poms sarto-library-pom/pom.xml
+      parents: instanto-io/experimental-parent pom.xml
 ```
 
 ## Publishing
 
-Snapshots go to the organisation's GitHub Packages. A release goes to both
-Maven Central and GitHub Packages.
+Snapshots go to `packages.instanto.io`. Release versions go to Maven Central.
 
 ```bash
 mvn deploy                                  # snapshot
-mvn -P release,sign-release,central deploy  # release
+mvn -P release,sign-release deploy          # release
 ```
 
 `release` rejects snapshot versions, parents and dependencies and checks the
-Java and Maven versions. `central` adds Maven Central on top of the
-repository's own `distributionManagement` destination, and needs `sign-release`
-because Central requires signatures. Credentials and signing keys stay in the
-local build environment; the `central` server id names them in Maven settings.
+Java and Maven versions. The Central publishing extension is active by default
+and needs `sign-release` because Central requires signatures. Credentials and
+signing keys stay in the local build environment; the `central` server id names
+them in Maven settings. Snapshot deployment uses the `forgejo` server id.

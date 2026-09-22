@@ -1,0 +1,30 @@
+name: Build and publish parents
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    uses: instanto-io/instanto-poms/.github/workflows/maven-build.yml@main
+    with:
+      name: Verify Maven parents
+      parents: ''
+      goals: clean verify
+    secrets: inherit
+
+  publish-snapshot:
+    if: github.repository == 'instanto-io/instanto-poms' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: verify
+    uses: instanto-io/instanto-poms/.github/workflows/maven-build.yml@main
+    with:
+      name: Publish Maven parent snapshots
+      parents: ''
+      goals: deploy
+      maven-args: -DskipTests
+    secrets: inherit

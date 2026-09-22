@@ -21,16 +21,15 @@
                  reporting on every module; the release, sign-release and
                  central profiles.
 
-       Publishing  Snapshots go to the organisation's GitHub Packages. A
-                 release goes to both Maven Central and GitHub Packages:
-                 distributionManagement in each repository carries the Packages
-                 destination, and the central profile adds Central on top.
+       Publishing  Snapshots go to the Instanto Forgejo registry. Release
+                 versions go to Maven Central through the Central Publisher
+                 Portal.
 
                      mvn deploy                              snapshot
-                     mvn -P release,sign-release,central deploy
+                     mvn -P release,sign-release deploy      release
        Requires  Nothing. A project inherits this POM and builds.
-       Supplies  Each repository declares its own SCM, distributionManagement
-        itself  and repositories. They are deliberately absent here.
+       Supplies  Each repository declares its own SCM. The shared snapshot
+        itself  registry and release publisher are inherited from this POM.
        Not here  Library dependencies, BOM imports, and anything specific to a
                  toolchain. TeaVM lives in instanto-teavm-pom.
   -->
@@ -53,7 +52,36 @@
     <module>instanto-teavm-pom</module>
   </modules>
 
-  <!-- Each repository supplies its own SCM and publication destinations. -->
+  <!-- Snapshot publication stays inside Instanto. The Central extension below
+       captures release versions and uploads them to the Publisher Portal. -->
+  <distributionManagement>
+    <snapshotRepository>
+      <id>forgejo</id>
+      <name>Instanto snapshots</name>
+      <url>https://packages.instanto.io/api/packages/instanto-io/maven</url>
+    </snapshotRepository>
+  </distributionManagement>
+
+  <repositories>
+    <repository>
+      <id>forgejo</id>
+      <name>Instanto snapshots</name>
+      <url>https://packages.instanto.io/api/packages/instanto-io/maven</url>
+      <releases><enabled>false</enabled></releases>
+      <snapshots><enabled>true</enabled></snapshots>
+    </repository>
+  </repositories>
+
+  <pluginRepositories>
+    <pluginRepository>
+      <id>forgejo</id>
+      <name>Instanto snapshot build plugins</name>
+      <url>https://packages.instanto.io/api/packages/instanto-io/maven</url>
+      <releases><enabled>false</enabled></releases>
+      <snapshots><enabled>true</enabled></snapshots>
+    </pluginRepository>
+  </pluginRepositories>
+
   <properties>
     <maven.compiler.release>21</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -280,6 +308,16 @@
           </execution>
         </executions>
       </plugin>
+      <!-- The extension publishes release versions to Maven Central. Snapshot
+           versions continue through distributionManagement to Forgejo. -->
+      <plugin>
+        <groupId>org.sonatype.central</groupId>
+        <artifactId>central-publishing-maven-plugin</artifactId>
+        <extensions>true</extensions>
+        <configuration>
+          <publishingServerId>central</publishingServerId>
+        </configuration>
+      </plugin>
     </plugins>
   </build>
 
@@ -310,26 +348,6 @@
         </plugins>
       </build>
     </profile>
-    <!-- Publish to Maven Central in addition to the repository's own GitHub
-         Packages destination. Central requires signatures, so pair it with
-         sign-release. The central server id names the credentials in the
-         local Maven settings. -->
-    <profile>
-      <id>central</id>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.sonatype.central</groupId>
-            <artifactId>central-publishing-maven-plugin</artifactId>
-            <extensions>true</extensions>
-            <configuration>
-              <publishingServerId>central</publishingServerId>
-            </configuration>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
-
     <profile>
       <id>sign-release</id>
       <build>

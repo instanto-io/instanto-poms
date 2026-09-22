@@ -2,10 +2,9 @@ name: Maven build
 
 # Shared Maven job for Instanto repositories.
 #
-# It checks out the repository, installs whichever shared parents the build
-# needs, writes Maven credentials for every GitHub Packages repository the
-# build declares, and runs Maven. Callers supply only what differs from the
-# defaults.
+# It checks out the repository, writes package credentials, and runs Maven.
+# Published parents and dependencies resolve from packages.instanto.io. The
+# optional parents input remains for a deliberate source-build experiment.
 #
 # Runners default to the organisation's container runners, which carry the tools
 # these builds need. Pass runner-labels to
@@ -39,10 +38,10 @@ on:
         default: 3.9.16
       parents:
         description: >
-          Shared parents to install before the build, one per line as
-          "<owner/repo> <pom path>". Order matters.
+          Exceptional source parents to install before the build, one per line
+          as "<owner/repo> <pom path>". Published parents need no entry.
         type: string
-        default: instanto-io/instanto-poms pom.xml
+        default: ''
       goals:
         description: Maven goals and phases for the build step.
         type: string
@@ -82,6 +81,8 @@ permissions:
 
 jobs:
   build:
+    # GitHub withholds package credentials from fork pull requests.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ${{ fromJSON(inputs.runner-labels) }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     env:

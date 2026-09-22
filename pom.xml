@@ -308,16 +308,6 @@
           </execution>
         </executions>
       </plugin>
-      <!-- The extension publishes release versions to Maven Central. Snapshot
-           versions continue through distributionManagement to Forgejo. -->
-      <plugin>
-        <groupId>org.sonatype.central</groupId>
-        <artifactId>central-publishing-maven-plugin</artifactId>
-        <extensions>true</extensions>
-        <configuration>
-          <publishingServerId>central</publishingServerId>
-        </configuration>
-      </plugin>
     </plugins>
   </build>
 
@@ -326,6 +316,17 @@
       <id>release</id>
       <build>
         <plugins>
+          <!-- Central's extension replaces Maven's deploy lifecycle, so load it
+               only for an explicit release build. Snapshot deploys must use the
+               standard deploy plugin and distributionManagement above. -->
+          <plugin>
+            <groupId>org.sonatype.central</groupId>
+            <artifactId>central-publishing-maven-plugin</artifactId>
+            <extensions>true</extensions>
+            <configuration>
+              <publishingServerId>central</publishingServerId>
+            </configuration>
+          </plugin>
           <plugin>
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-enforcer-plugin</artifactId>

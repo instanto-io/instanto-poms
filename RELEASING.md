@@ -28,13 +28,15 @@ as `0.7.0-rc.2`; never replace `0.7.0-rc.1`. Leave `main` at
 branch from the accepted candidate, change its version to `0.7.0`, verify it
 again, and then publish it. Advance `main` only after the final release succeeds.
 
-GitHub Packages can hold both snapshots and candidates. With Portal credentials,
-the optional `central` profile can publish snapshots to Central Portal's
-separate snapshot repository; these are temporary and should not be the source
-of a reproducible release. The same profile can publish candidates as immutable
-versions when paired with signing and the required metadata. All parent POMs
-and dependencies must have fixed published versions before the `release`
-profile can verify a candidate or final release.
+GitHub Packages can hold both snapshots and candidates. Central Portal also has
+a separate, temporary snapshot repository, but the current `central` profile
+does not direct snapshots there: the projects' POMs send snapshots to their
+configured GitHub Packages destinations. Publishing Central snapshots
+would require a separate snapshot destination and credentials. The `central`
+profile can publish candidates as immutable versions when paired with signing
+and the required metadata. All parent POMs and dependencies must have fixed
+published versions before the `release` profile can verify a candidate or
+final release.
 
 ## Prepare the checkout
 

@@ -20,8 +20,52 @@ detail rather than this file.
 </parent>
 ```
 
-Name `instanto-teavm-pom` instead when the project targets the browser. Maven
-resolves either from the local cache or a configured package repository.
+Name `instanto-teavm-pom` instead when the project targets the browser.
+
+Both are published as snapshots to packages.instanto.io. Maven looks for a parent
+before it reads the parent's own repositories, so the registry has to be known
+beforehand. The shared CI workflow writes it into Maven settings; on a developer
+machine, add the same to `~/.m2/settings.xml`, with a Forgejo account that can read
+the organisation's packages:
+
+```xml
+<settings>
+  <servers>
+    <server>
+      <id>forgejo-instanto</id>
+      <username>…</username>
+      <password>…</password>
+    </server>
+  </servers>
+  <profiles>
+    <profile>
+      <id>instanto-snapshots</id>
+      <repositories>
+        <repository>
+          <id>forgejo-instanto</id>
+          <url>https://packages.instanto.io/api/packages/instanto-io/maven</url>
+          <releases><enabled>false</enabled></releases>
+          <snapshots><enabled>true</enabled></snapshots>
+        </repository>
+      </repositories>
+      <pluginRepositories>
+        <pluginRepository>
+          <id>forgejo-instanto</id>
+          <url>https://packages.instanto.io/api/packages/instanto-io/maven</url>
+          <releases><enabled>false</enabled></releases>
+          <snapshots><enabled>true</enabled></snapshots>
+        </pluginRepository>
+      </pluginRepositories>
+    </profile>
+  </profiles>
+  <activeProfiles>
+    <activeProfile>instanto-snapshots</activeProfile>
+  </activeProfiles>
+</settings>
+```
+
+After that, every project below these parents inherits the snapshot destination and
+the repository to resolve from, and declares neither.
 
 A project that cannot change its parent can import `instanto-teavm-pom` into
 `dependencyManagement` with `<type>pom</type><scope>import</scope>`. An import
@@ -31,14 +75,10 @@ the plugin pin.
 ## What a project supplies itself
 
 The parent identifies its own source repository. Each child repository overrides
-that SCM address and sets its own `distributionManagement` and `repositories`.
-This parent repository supplies its GitHub Packages destination at deploy time.
-Its CI does that automatically after a successful build. To publish the parent
-snapshot manually from an Instanto-io checkout, use:
-
-```sh
-mvn -DaltSnapshotDeploymentRepository=github::https://maven.pkg.github.com/instanto-io/instanto-poms deploy
-```
+that SCM address and, for fixed versions, supplies its release repository.
+Snapshots need nothing: a child inherits packages.instanto.io as its destination.
+This repository's CI publishes the parent snapshots after a successful build;
+`mvn deploy` does the same by hand.
 
 ## Hierarchy
 
@@ -54,7 +94,8 @@ instanto-org-pom                   Every Instanto project
 ## Shared CI
 
 `.github/workflows/maven-build.yml` is a reusable workflow that checks out the
-repository, installs the shared parents and runs Maven. Jobs run on the
+repository, writes Maven settings for packages.instanto.io and any GitHub
+Packages repositories the build declares, and runs Maven. Jobs run on the
 self-hosted pool unless a caller says otherwise.
 
 ```yaml
@@ -63,9 +104,12 @@ jobs:
     uses: instanto-io/instanto-poms/.github/workflows/maven-build.yml@main
     with:
       name: Verify modules
-    secrets:
-      PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
+    secrets: inherit
 ```
+
+`secrets: inherit` passes `FORGEJO_PACKAGE_USER` and `FORGEJO_PACKAGE_TOKEN`, which
+publish and read snapshots on packages.instanto.io, and `PACKAGES_TOKEN` for GitHub
+Packages.
 
 A build that needs a platform the self-hosted pool does not have — the JavaFX
 artifacts for Windows and arm64, for instance — passes hosted labels instead:
@@ -86,26 +130,26 @@ artifacts for Windows and arm64, for instance — passes hosted labels instead:
 ```
 
 Inputs: `runner-labels`, `java-version`, `parents`, `goals`, `maven-args`,
-`timeout-minutes`, `name`. A build needing a second parent, such as the Sarto library
-parent, lists it:
+`timeout-minutes`, `name`. Published parents resolve from packages.instanto.io, so
+`parents` is empty by default; use it only to test a parent that is not published
+yet:
 
 ```yaml
       parents: |
-        instanto-io/instanto-poms pom.xml
         instanto-io/sarto-poms sarto-library-pom/pom.xml
 ```
 
 ## Publishing
 
-Snapshots go to the organisation's GitHub Packages. A fixed version can go to
-GitHub Packages and Maven Central in two separate deploys.
+Snapshots go to packages.instanto.io. A fixed version goes to the repository's
+release destination and to Maven Central in two separate deploys.
 Release candidates use fixed versions such as `0.7.0-rc.1` and follow the
 same verification and publication checks as a final release. The
 [release process](RELEASING.md) covers candidate branches and version changes.
 
 ```bash
-mvn deploy                                  # snapshot to GitHub Packages
-mvn -P release deploy                       # fixed version to GitHub Packages
+mvn deploy                                  # snapshot to packages.instanto.io
+mvn -P release deploy                       # fixed version to the release repository
 mvn -P release,sign-release,central deploy  # fixed version to Central
 ```
 

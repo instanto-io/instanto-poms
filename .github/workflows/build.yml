@@ -27,5 +27,5 @@ jobs:
       name: Publish Maven parent snapshots
       parents: ''
       goals: deploy
-      maven-args: -DskipTests -DaltSnapshotDeploymentRepository=github::https://maven.pkg.github.com/instanto-io/instanto-poms
+      maven-args: -DskipTests
     secrets: inherit

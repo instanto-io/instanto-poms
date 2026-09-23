@@ -2,9 +2,12 @@ name: Maven build
 
 # Shared Maven job for Instanto repositories.
 #
-# It checks out the repository, installs whichever shared parents the build
-# needs, writes Maven credentials for every GitHub Packages repository the
-# build declares, and runs Maven. Callers supply only what differs from the
+# It checks out the repository, writes Maven settings and runs Maven. The
+# settings carry credentials for packages.instanto.io, where Instanto snapshots
+# are published and resolved, and for every GitHub Packages repository the
+# build declares. They also declare packages.instanto.io as a repository, which
+# is what lets Maven find the shared parents at all: a parent cannot supply the
+# repository it is published in. Callers supply only what differs from the
 # defaults.
 #
 # Runners default to the organisation's container runners, which carry the tools
@@ -37,10 +40,11 @@ on:
         default: 3.9.16
       parents:
         description: >
-          Shared parents to install before the build, one per line as
-          "<owner/repo> <pom path>". Order matters.
+          Parents to build from source before the build, one per line as
+          "<owner/repo> <pom path>", for testing an unpublished parent. Published
+          parents resolve from packages.instanto.io and need no entry.
         type: string
-        default: instanto-io/instanto-poms pom.xml
+        default: ''
       goals:
         description: Maven goals and phases for the build step.
         type: string
@@ -61,6 +65,12 @@ on:
       PACKAGES_TOKEN:
         description: Token with read access to the organisation's private packages and repositories.
         required: false
+      FORGEJO_PACKAGE_USER:
+        description: Forgejo account that publishes and reads Instanto snapshots on packages.instanto.io.
+        required: false
+      FORGEJO_PACKAGE_TOKEN:
+        description: Token for that Forgejo account.
+        required: false
       ARTIFACTS_USERNAME:
         description: Nexus account at artifacts.instanto.io, for jobs that deploy there.
         required: false
@@ -79,6 +89,8 @@ jobs:
     env:
       MAVEN_TOKEN: ${{ secrets.PACKAGES_TOKEN || github.token }}
       MAVEN_ACTOR: ${{ github.actor }}
+      FORGEJO_PACKAGE_USER: ${{ secrets.FORGEJO_PACKAGE_USER }}
+      FORGEJO_PACKAGE_TOKEN: ${{ secrets.FORGEJO_PACKAGE_TOKEN }}
       ARTIFACTS_USERNAME: ${{ secrets.ARTIFACTS_USERNAME }}
       ARTIFACTS_TOKEN: ${{ secrets.ARTIFACTS_TOKEN }}
     steps:
@@ -135,13 +147,27 @@ jobs:
             for id in $ids; do
               echo "  <server><id>${id}</id><username>\${env.MAVEN_ACTOR}</username><password>\${env.MAVEN_TOKEN}</password></server>"
             done
+            # packages.instanto.io, where snapshots are published and resolved.
+            if [ -n "${FORGEJO_PACKAGE_TOKEN:-}" ]; then
+              : "${FORGEJO_PACKAGE_USER:?FORGEJO_PACKAGE_USER is required with FORGEJO_PACKAGE_TOKEN}"
+              echo '  <server><id>forgejo-instanto</id><username>${env.FORGEJO_PACKAGE_USER}</username><password>${env.FORGEJO_PACKAGE_TOKEN}</password></server>'
+              echo "forgejo-instanto: credentials written" >&2
+            fi
             # Only when the caller supplied them; a build that does not deploy to
             # Nexus should not fail for want of an account.
             if [ -n "${ARTIFACTS_TOKEN:-}" ]; then
               echo "  <server><id>artifacts</id><username>\${env.ARTIFACTS_USERNAME}</username><password>\${env.ARTIFACTS_TOKEN}</password></server>"
               echo "artifacts: credentials written" >&2
             fi
-            echo '</servers></settings>'
+            echo '</servers>'
+            # The bootstrap repository: Maven looks for a parent before it reads the
+            # parent's own repositories, so packages.instanto.io has to be known here.
+            echo '<profiles><profile><id>instanto-snapshots</id>'
+            for kind in repositories:repository pluginRepositories:pluginRepository; do
+              echo "  <${kind%:*}><${kind##*:}><id>forgejo-instanto</id><url>https://packages.instanto.io/api/packages/instanto-io/maven</url><releases><enabled>false</enabled></releases><snapshots><enabled>true</enabled></snapshots></${kind##*:}></${kind%:*}>"
+            done
+            echo '</profile></profiles><activeProfiles><activeProfile>instanto-snapshots</activeProfile></activeProfiles>'
+            echo '</settings>'
           } > "$settings"
           echo "MAVEN_SETTINGS=$settings" >> "$GITHUB_ENV"
           echo "Credentials written for: $(echo $ids | tr '\n' ' ')"

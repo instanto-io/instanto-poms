@@ -13,10 +13,9 @@ next development version.
 
 Keep `main` at the next intended version with `-SNAPSHOT`, such as
 `0.7.0-SNAPSHOT`. After verification, `mvn deploy` publishes this changing
-development version to the repository's configured snapshot destination. The
-current widget and compatibility repositories use GitHub Packages by default.
-Repositories with an `artifacts` profile can also publish to the Instanto Nexus with
-`mvn -Partifacts deploy`. These builds do not create a release branch.
+development version to packages.instanto.io, the snapshot destination every
+project inherits from `instanto-org-pom`. These builds do not create a release
+branch.
 
 A release candidate is a separate, fixed version, such as `0.7.0-rc.1` on a
 branch with the same name. Create it from the verified Instanto `main`, set the
@@ -28,14 +27,14 @@ as `0.7.0-rc.2`; never replace `0.7.0-rc.1`. Leave `main` at
 branch from the accepted candidate, change its version to `0.7.0`, verify it
 again, and then publish it. Advance `main` only after the final release succeeds.
 
-GitHub Packages can hold both snapshots and candidates. Central Portal also has
+Candidates go to the repository's release destination. Central Portal also has
 a separate, temporary snapshot repository, but the current `central` profile
-does not direct snapshots there: the projects' POMs send snapshots to their
-configured GitHub Packages destinations. Publishing Central snapshots
+does not direct snapshots there: snapshots go to packages.instanto.io. Publishing
+Central snapshots
 would require a separate snapshot destination and credentials. The `central`
 profile can publish candidates as immutable versions when paired with signing
-and the required metadata. It replaces Maven's normal deploy, so publish to
-GitHub Packages separately when both destinations are wanted. All parent POMs
+and the required metadata. It replaces Maven's normal deploy, so publish to the
+release repository separately when both destinations are wanted. All parent POMs
 and dependencies must have fixed published versions before the `release`
 profile can verify a candidate or final release.
 

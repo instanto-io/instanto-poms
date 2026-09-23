@@ -21,17 +21,20 @@
                  reporting on every module; the release, sign-release and
                  central profiles.
 
-       Publishing  Each repository chooses its Maven destination. Snapshots
-                 currently go to GitHub Packages. A fixed version can be sent
-                 to GitHub Packages and then, in a separate run, to Central.
+       Publishing  Snapshots go to packages.instanto.io, the Instanto Forgejo
+                 registry, which the organisation's runners reach over the LAN.
+                 Every project inherits that destination and the repository to
+                 resolve from. A fixed version goes to the repository's own
+                 release destination and then, in a separate run, to Central.
 
                      mvn deploy                              snapshot
-                     mvn -P release deploy                    GitHub release
+                     mvn -P release deploy                    fixed version
                      mvn -P release,sign-release,central deploy  Central release
-       Requires  Nothing. A project inherits this POM and builds.
-       Supplies  Each repository declares its own SCM, distributionManagement
-        itself  and repositories. This parent repository uses a deployment
-                 override when publishing its own artifacts.
+       Requires  The forgejo-instanto repository to resolve this parent itself:
+                 a parent cannot supply the repository it is found in. The shared
+                 CI workflow writes it into Maven settings; see the README.
+       Supplies  Each repository declares its own SCM and, for fixed versions,
+        itself  its release repository.
        Not here  Library dependencies, BOM imports, and anything specific to a
                  toolchain. TeaVM lives in instanto-teavm-pom.
   -->
@@ -68,8 +71,38 @@
     <module>instanto-teavm-pom</module>
   </modules>
 
-  <!-- Child repositories override this parent's SCM and supply their own
-       publication destinations. -->
+  <!-- Snapshots are published to, and resolved from, packages.instanto.io. The id
+       forgejo-instanto is the one Maven settings hold credentials under. -->
+  <distributionManagement>
+    <snapshotRepository>
+      <id>forgejo-instanto</id>
+      <name>Instanto snapshots</name>
+      <url>https://packages.instanto.io/api/packages/instanto-io/maven</url>
+    </snapshotRepository>
+  </distributionManagement>
+
+  <repositories>
+    <repository>
+      <id>forgejo-instanto</id>
+      <name>Instanto snapshots</name>
+      <url>https://packages.instanto.io/api/packages/instanto-io/maven</url>
+      <releases><enabled>false</enabled></releases>
+      <snapshots><enabled>true</enabled></snapshots>
+    </repository>
+  </repositories>
+
+  <pluginRepositories>
+    <pluginRepository>
+      <id>forgejo-instanto</id>
+      <name>Instanto snapshot build plugins</name>
+      <url>https://packages.instanto.io/api/packages/instanto-io/maven</url>
+      <releases><enabled>false</enabled></releases>
+      <snapshots><enabled>true</enabled></snapshots>
+    </pluginRepository>
+  </pluginRepositories>
+
+  <!-- Child repositories override this parent's SCM and supply their own release
+       destination. -->
   <properties>
     <maven.compiler.release>21</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>

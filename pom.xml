@@ -21,15 +21,17 @@
                  reporting on every module; the release, sign-release and
                  central profiles.
 
-       Publishing  Snapshots go to the Instanto Forgejo registry. Release
-                 versions go to Maven Central through the Central Publisher
-                 Portal.
+       Publishing  Each repository chooses its Maven destination. Snapshots
+                 currently go to GitHub Packages. A fixed version can be sent
+                 to GitHub Packages and then, in a separate run, to Central.
 
                      mvn deploy                              snapshot
-                     mvn -P release,sign-release deploy      release
+                     mvn -P release deploy                    GitHub release
+                     mvn -P release,sign-release,central deploy  Central release
        Requires  Nothing. A project inherits this POM and builds.
-       Supplies  Each repository declares its own SCM. The shared snapshot
-        itself  registry and release publisher are inherited from this POM.
+       Supplies  Each repository declares its own SCM, distributionManagement
+        itself  and repositories. This parent repository uses a deployment
+                 override when publishing its own artifacts.
        Not here  Library dependencies, BOM imports, and anything specific to a
                  toolchain. TeaVM lives in instanto-teavm-pom.
   -->
@@ -45,6 +47,20 @@
       <distribution>repo</distribution>
     </license>
   </licenses>
+  <developers>
+    <developer>
+      <name>Carl</name>
+      <email>carl@instanto.io</email>
+      <organization>Instanto</organization>
+      <organizationUrl>https://instanto.io</organizationUrl>
+    </developer>
+  </developers>
+  <scm>
+    <url>https://github.com/instanto-io/instanto-poms</url>
+    <connection>scm:git:https://github.com/instanto-io/instanto-poms.git</connection>
+    <developerConnection>scm:git:ssh://git@github.com/instanto-io/instanto-poms.git</developerConnection>
+    <tag>HEAD</tag>
+  </scm>
 
   <!-- Parents published from this repository. This POM stays platform-neutral;
        anything tied to a particular toolchain lives in a module beside it. -->
@@ -52,36 +68,8 @@
     <module>instanto-teavm-pom</module>
   </modules>
 
-  <!-- Snapshot publication stays inside Instanto. The Central extension below
-       captures release versions and uploads them to the Publisher Portal. -->
-  <distributionManagement>
-    <snapshotRepository>
-      <id>forgejo</id>
-      <name>Instanto snapshots</name>
-      <url>https://packages.instanto.io/api/packages/instanto-io/maven</url>
-    </snapshotRepository>
-  </distributionManagement>
-
-  <repositories>
-    <repository>
-      <id>forgejo</id>
-      <name>Instanto snapshots</name>
-      <url>https://packages.instanto.io/api/packages/instanto-io/maven</url>
-      <releases><enabled>false</enabled></releases>
-      <snapshots><enabled>true</enabled></snapshots>
-    </repository>
-  </repositories>
-
-  <pluginRepositories>
-    <pluginRepository>
-      <id>forgejo</id>
-      <name>Instanto snapshot build plugins</name>
-      <url>https://packages.instanto.io/api/packages/instanto-io/maven</url>
-      <releases><enabled>false</enabled></releases>
-      <snapshots><enabled>true</enabled></snapshots>
-    </pluginRepository>
-  </pluginRepositories>
-
+  <!-- Child repositories override this parent's SCM and supply their own
+       publication destinations. -->
   <properties>
     <maven.compiler.release>21</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -316,17 +304,6 @@
       <id>release</id>
       <build>
         <plugins>
-          <!-- Central's extension replaces Maven's deploy lifecycle, so load it
-               only for an explicit release build. Snapshot deploys must use the
-               standard deploy plugin and distributionManagement above. -->
-          <plugin>
-            <groupId>org.sonatype.central</groupId>
-            <artifactId>central-publishing-maven-plugin</artifactId>
-            <extensions>true</extensions>
-            <configuration>
-              <publishingServerId>central</publishingServerId>
-            </configuration>
-          </plugin>
           <plugin>
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-enforcer-plugin</artifactId>
@@ -349,6 +326,27 @@
         </plugins>
       </build>
     </profile>
+    <!-- Select Central publishing for an explicit release run. Its extension
+         replaces Maven's normal deploy goal; publish to GitHub Packages in a
+         separate run. Central requires signatures, so pair it with
+         sign-release. The central server id names the credentials in Maven
+         settings. -->
+    <profile>
+      <id>central</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.sonatype.central</groupId>
+            <artifactId>central-publishing-maven-plugin</artifactId>
+            <extensions>true</extensions>
+            <configuration>
+              <publishingServerId>central</publishingServerId>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+
     <profile>
       <id>sign-release</id>
       <build>

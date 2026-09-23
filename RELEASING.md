@@ -34,9 +34,10 @@ does not direct snapshots there: the projects' POMs send snapshots to their
 configured GitHub Packages destinations. Publishing Central snapshots
 would require a separate snapshot destination and credentials. The `central`
 profile can publish candidates as immutable versions when paired with signing
-and the required metadata. All parent POMs and dependencies must have fixed
-published versions before the `release` profile can verify a candidate or
-final release.
+and the required metadata. It replaces Maven's normal deploy, so publish to
+GitHub Packages separately when both destinations are wanted. All parent POMs
+and dependencies must have fixed published versions before the `release`
+profile can verify a candidate or final release.
 
 ## Prepare the checkout
 
@@ -100,9 +101,14 @@ git push origin 0.7.0
 mvn -Prelease deploy
 ```
 
-Use `-Prelease,sign-release` for destinations that require signing. A destination
-that stages uploads for approval must complete that publication step before
-proceeding.
+The command above sends a fixed version to the repository's own GitHub
+Packages destination. To publish the same verified version to Central, run
+`mvn -Prelease,sign-release,central deploy` separately with Central credentials
+and signing set up. The Maven parent repository has no built-in destination, so
+its own GitHub deploy adds
+`-DaltDeploymentRepository=github::https://maven.pkg.github.com/instanto-io/instanto-poms`.
+A destination that stages uploads for approval must complete that publication
+step before proceeding.
 Never overwrite artifacts that have already been published under a release
 version; make another release for subsequent changes.
 

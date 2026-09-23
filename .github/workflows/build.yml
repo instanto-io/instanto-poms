@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   verify:
-    uses: instanto-io/instanto-poms/.github/workflows/maven-build.yml@main
+    uses: ./.github/workflows/maven-build.yml
     with:
       name: Verify Maven parents
       parents: ''
@@ -22,10 +22,10 @@ jobs:
   publish-snapshot:
     if: github.repository == 'instanto-io/instanto-poms' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     needs: verify
-    uses: instanto-io/instanto-poms/.github/workflows/maven-build.yml@main
+    uses: ./.github/workflows/maven-build.yml
     with:
       name: Publish Maven parent snapshots
       parents: ''
       goals: deploy
-      maven-args: -DskipTests
+      maven-args: -DskipTests -DaltSnapshotDeploymentRepository=github::https://maven.pkg.github.com/instanto-io/instanto-poms
     secrets: inherit

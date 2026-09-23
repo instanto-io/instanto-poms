@@ -101,6 +101,10 @@ unpublished parent source tree explicitly.
 
 ## Publishing
 
+Release candidates use fixed versions such as `0.7.0-rc.1` and follow the
+same verification and publication checks as final releases. See the
+[release process](RELEASING.md) for snapshot and candidate branches.
+
 Snapshots go to `packages.instanto.io`. Release versions go to Maven Central.
 
 ```bash

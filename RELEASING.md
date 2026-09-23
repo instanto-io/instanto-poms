@@ -9,6 +9,33 @@ The root POM owns the release version. For example, a project at
 have a different version. A patch, minor or major increment determines the
 next development version.
 
+## Development snapshots and release candidates
+
+Keep `main` at the next intended version with `-SNAPSHOT`, such as
+`0.7.0-SNAPSHOT`. After verification, `mvn deploy` publishes this changing
+development version to the repository's configured snapshot destination. The
+current widget and compatibility repositories use GitHub Packages by default.
+Repositories with an `artifacts` profile can also publish to the Instanto Nexus with
+`mvn -Partifacts deploy`. These builds do not create a release branch.
+
+A release candidate is a separate, fixed version, such as `0.7.0-rc.1` on a
+branch with the same name. Create it from the verified Instanto `main`, set the
+root and module versions with the Maven Versions plugin, and use the normal
+`release` verification and publication steps below. The `release` profile
+accepts a candidate because its version is not a snapshot. Publish a correction
+as `0.7.0-rc.2`; never replace `0.7.0-rc.1`. Leave `main` at
+`0.7.0-SNAPSHOT` while candidates are evaluated. Create the final `0.7.0`
+branch from the accepted candidate, change its version to `0.7.0`, verify it
+again, and then publish it. Advance `main` only after the final release succeeds.
+
+GitHub Packages can hold both snapshots and candidates. With Portal credentials,
+the optional `central` profile can publish snapshots to Central Portal's
+separate snapshot repository; these are temporary and should not be the source
+of a reproducible release. The same profile can publish candidates as immutable
+versions when paired with signing and the required metadata. All parent POMs
+and dependencies must have fixed published versions before the `release`
+profile can verify a candidate or final release.
+
 ## Prepare the checkout
 
 Use a clean checkout of the Instanto-io repository's `main` branch. Check its

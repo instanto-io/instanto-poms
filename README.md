@@ -7,7 +7,7 @@ detail rather than this file.
 | Parent | Role |
 |---|---|
 | `io.instanto:instanto-org-pom` | The build contract for every Instanto project: Java 21, pinned plugin versions, Spotless, SpotBugs, source and Javadoc archives, and publication defaults. |
-| `io.instanto:instanto-teavm-pom` | Adds TeaVM for projects that compile to JavaScript or WebAssembly: the `teavm.version` property, managed `org.teavm` versions, and the `teavm-maven-plugin` pin. |
+| `io.instanto:instanto-teavm-pom` | Adds TeaVM for projects that compile to JavaScript or WebAssembly: the `teavm.version` property, managed `org.teavm` versions, and the `teavm-maven-plugin` pin, which makes every TeaVM compile write a source map and copy the Java sources it maps to. |
 
 ## Use a parent
 

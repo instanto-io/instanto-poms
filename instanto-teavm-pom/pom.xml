@@ -24,16 +24,18 @@
        Provides  The teavm.version property; managed versions for every
                  org.teavm artifact the organisation uses, so a module can
                  declare them without a <version>; a pluginManagement pin for
-                 teavm-maven-plugin.
-       Requires  Nothing.
-       Not here  TeaVM build configuration. Targets, optimisation level and
-                 output directory belong to each application parent, which
-                 knows what it is producing.
+                 teavm-maven-plugin, which also makes every TeaVM compile
+                 write a source map and copy the Java sources it maps to.
+       Requires  Source archives for the libraries an application compiles,
+                 which instanto-org-pom attaches to every build.
+       Not here  The rest of TeaVM build configuration. Targets, optimisation
+                 level and output directory belong to each application parent,
+                 which knows what it is producing.
 
        A project that cannot change its parent may import this POM into
        dependencyManagement with <type>pom</type><scope>import</scope>. An
        import carries the managed versions only — not the property, and not
-       the plugin pin.
+       the plugin pin or its source-map defaults.
   -->
 
   <properties>
@@ -129,12 +131,18 @@
   <build>
     <pluginManagement>
       <plugins>
-        <!-- Version only. Each application parent configures its own targets,
-             optimisation level and output directory. -->
+        <!-- Every TeaVM application is debuggable in the browser as Java: the
+             compiler writes a source map beside the script and copies the
+             sources it names. Each application parent configures its own
+             targets, optimisation level and output directory. -->
         <plugin>
           <groupId>org.teavm</groupId>
           <artifactId>teavm-maven-plugin</artifactId>
           <version>${teavm.version}</version>
+          <configuration>
+            <sourceMapsGenerated>true</sourceMapsGenerated>
+            <sourceFilesCopied>true</sourceFilesCopied>
+          </configuration>
         </plugin>
       </plugins>
     </pluginManagement>

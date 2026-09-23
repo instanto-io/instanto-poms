@@ -33,6 +33,12 @@ the plugin pin.
 The parent identifies its own source repository. Each child repository overrides
 that SCM address and sets its own `distributionManagement` and `repositories`.
 This parent repository supplies its GitHub Packages destination at deploy time.
+Its CI does that automatically after a successful build. To publish the parent
+snapshot manually from an Instanto-io checkout, use:
+
+```sh
+mvn -DaltSnapshotDeploymentRepository=github::https://maven.pkg.github.com/instanto-io/instanto-poms deploy
+```
 
 ## Hierarchy
 

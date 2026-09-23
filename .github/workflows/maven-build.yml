@@ -16,9 +16,9 @@ name: Maven build
 # with "github" in the repository's POMs gets a server entry, so a repository
 # does not need to keep its own settings file.
 #
-# A caller that publishes snapshots to packages.instanto.io passes
-# FORGEJO_PACKAGE_USER and FORGEJO_PACKAGE_TOKEN; those become the "forgejo"
-# server. The older artifacts.instanto.io credentials remain supported while
+# A verification caller passes FORGEJO_PACKAGE_READ_TOKEN; a trusted snapshot
+# publication caller passes FORGEJO_PACKAGE_TOKEN. Both use the "forgejo" server.
+# The older artifacts.instanto.io credentials remain supported while
 # repositories complete that migration.
 
 on:
@@ -66,7 +66,10 @@ on:
         description: Forgejo service account used to publish and read Instanto snapshots.
         required: false
       FORGEJO_PACKAGE_TOKEN:
-        description: Forgejo token used to publish and read Instanto snapshots.
+        description: Forgejo write token for trusted snapshot publication jobs.
+        required: false
+      FORGEJO_PACKAGE_READ_TOKEN:
+        description: Forgejo read-only token for dependency resolution in verification jobs.
         required: false
       ARTIFACTS_USERNAME:
         description: Nexus account at artifacts.instanto.io, for jobs that deploy there.
@@ -90,6 +93,7 @@ jobs:
       MAVEN_ACTOR: ${{ github.actor }}
       FORGEJO_PACKAGE_USER: ${{ secrets.FORGEJO_PACKAGE_USER }}
       FORGEJO_PACKAGE_TOKEN: ${{ secrets.FORGEJO_PACKAGE_TOKEN }}
+      FORGEJO_PACKAGE_READ_TOKEN: ${{ secrets.FORGEJO_PACKAGE_READ_TOKEN }}
       ARTIFACTS_USERNAME: ${{ secrets.ARTIFACTS_USERNAME }}
       ARTIFACTS_TOKEN: ${{ secrets.ARTIFACTS_TOKEN }}
     steps:
@@ -146,10 +150,14 @@ jobs:
             for id in $ids; do
               echo "  <server><id>${id}</id><username>\${env.MAVEN_ACTOR}</username><password>\${env.MAVEN_TOKEN}</password></server>"
             done
-            if [ -n "${FORGEJO_PACKAGE_TOKEN:-}" ]; then
+            if [ -n "${FORGEJO_PACKAGE_READ_TOKEN:-}" ]; then
+              : "${FORGEJO_PACKAGE_USER:?FORGEJO_PACKAGE_USER is required with FORGEJO_PACKAGE_READ_TOKEN}"
+              echo '  <server><id>forgejo</id><username>${env.FORGEJO_PACKAGE_USER}</username><password>${env.FORGEJO_PACKAGE_READ_TOKEN}</password></server>'
+              echo "forgejo: read-only credentials written" >&2
+            elif [ -n "${FORGEJO_PACKAGE_TOKEN:-}" ]; then
               : "${FORGEJO_PACKAGE_USER:?FORGEJO_PACKAGE_USER is required with FORGEJO_PACKAGE_TOKEN}"
               echo '  <server><id>forgejo</id><username>${env.FORGEJO_PACKAGE_USER}</username><password>${env.FORGEJO_PACKAGE_TOKEN}</password></server>'
-              echo "forgejo: credentials written" >&2
+              echo "forgejo: publish credentials written" >&2
             fi
             # Only when the caller supplied them; a build that does not deploy to
             # Nexus should not fail for want of an account.

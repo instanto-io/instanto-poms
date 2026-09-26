@@ -61,6 +61,16 @@ on:
         description: Label for the build step, so logs say what ran.
         type: string
         default: Verify Maven modules
+      artifact-name:
+        description: >
+          Name to upload a build output under, for a later workflow such as a
+          Pages deploy. Empty uploads nothing.
+        type: string
+        default: ''
+      artifact-path:
+        description: Path of the build output to upload, when artifact-name is set.
+        type: string
+        default: ''
     secrets:
       PACKAGES_TOKEN:
         description: Token with read access to the organisation's private packages and repositories.
@@ -201,3 +211,12 @@ jobs:
           "$MVN" --settings "$MAVEN_SETTINGS" --batch-mode --no-transfer-progress --errors --fail-at-end \
             --update-snapshots \
             ${{ inputs.maven-args }} ${{ inputs.goals }}
+
+      - name: Upload ${{ inputs.artifact-name }}
+        if: inputs.artifact-name != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: ${{ inputs.artifact-path }}
+          if-no-files-found: error
+          retention-days: 7

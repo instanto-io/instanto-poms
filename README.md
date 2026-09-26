@@ -130,13 +130,23 @@ artifacts for Windows and arm64, for instance — passes hosted labels instead:
 ```
 
 Inputs: `runner-labels`, `java-version`, `parents`, `goals`, `maven-args`,
-`timeout-minutes`, `name`. Published parents resolve from packages.instanto.io, so
+`timeout-minutes`, `name`, `artifact-name`, `artifact-path`. Published parents resolve from packages.instanto.io, so
 `parents` is empty by default; use it only to test a parent that is not published
 yet:
 
 ```yaml
       parents: |
         instanto-io/sarto-poms sarto-library-pom/pom.xml
+```
+
+To hand a build output to a later workflow, such as a showcase deployed to GitHub
+Pages, name it and give its path. The upload happens only when the build passes:
+
+```yaml
+    with:
+      goals: clean verify
+      artifact-name: showcase-pages
+      artifact-path: showcase/target/site
 ```
 
 ## Publishing

@@ -39,7 +39,7 @@
   -->
 
   <properties>
-    <teavm.version>0.15.0</teavm.version>
+    <teavm.version>0.16.0</teavm.version>
   </properties>
 
   <dependencyManagement>

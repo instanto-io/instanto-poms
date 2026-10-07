@@ -18,14 +18,20 @@
 
   <!-- ── Role ────────────────────────────────────────────────────────────
        The TeaVM layer for projects that compile Java to JavaScript or WebAssembly.
-       It adds TeaVM and nothing else; everything an ordinary Instanto Java build
-       needs still arrives from instanto-org-pom above it.
+       It adds TeaVM and Instanto's TeaVM additions; everything an ordinary
+       Instanto Java build needs still arrives from instanto-org-pom above it.
 
        Provides  The teavm.version property; managed versions for every
                  org.teavm artifact the organisation uses, so a module can
                  declare them without a <version>; a pluginManagement pin for
                  teavm-maven-plugin, which also makes every TeaVM compile
                  write a source map and copy the Java sources it maps to.
+                 Managed versions for instanto-teavm-classlib (missing class
+                 library methods and fixes) and instanto-teavm-extensions (JUnit
+                 rule support, opt-in ThreadLocal checks), which a module adds
+                 as a dependency when it wants them. Two opt-in profiles:
+                 teavm-class-init-fix, the patched TeaVM core for exception-safe
+                 class initialisation, and teavm-browser-tests.
        Requires  Source archives for the libraries an application compiles,
                  which instanto-org-pom attaches to every build.
        Not here  The rest of TeaVM build configuration. Targets, optimisation
@@ -40,10 +46,26 @@
 
   <properties>
     <teavm.version>0.16.0</teavm.version>
+    <!-- Instanto's TeaVM additions, published from instanto-io/instanto-teavm. -->
+    <instanto-teavm.version>0.1.0-SNAPSHOT</instanto-teavm.version>
+    <instanto.teavm.threadLocalChecks>false</instanto.teavm.threadLocalChecks>
   </properties>
 
   <dependencyManagement>
     <dependencies>
+      <!-- Instanto's TeaVM additions: class-library methods and fixes, and JUnit
+           rule support with opt-in ThreadLocal checks. -->
+      <dependency>
+        <groupId>io.instanto</groupId>
+        <artifactId>instanto-teavm-classlib</artifactId>
+        <version>${instanto-teavm.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.instanto</groupId>
+        <artifactId>instanto-teavm-extensions</artifactId>
+        <version>${instanto-teavm.version}</version>
+      </dependency>
+
       <!-- Portable runtime: compiled against by code that targets the browser. -->
       <dependency>
         <groupId>org.teavm</groupId>
@@ -142,9 +164,92 @@
           <configuration>
             <sourceMapsGenerated>true</sourceMapsGenerated>
             <sourceFilesCopied>true</sourceFilesCopied>
+            <properties>
+              <instanto.teavm.threadLocalChecks>${instanto.teavm.threadLocalChecks}</instanto.teavm.threadLocalChecks>
+            </properties>
           </configuration>
         </plugin>
       </plugins>
     </pluginManagement>
   </build>
+  <profiles>
+    <!-- Explicit, version-bound compiler replacement. No application dependency
+         on Sarto or JUnit is introduced by enabling this profile. -->
+    <profile>
+      <id>teavm-class-init-fix</id>
+      <dependencies>
+        <dependency>
+          <groupId>io.instanto</groupId>
+          <artifactId>instanto-teavm-core-patch</artifactId>
+          <version>${instanto-teavm.version}</version>
+          <scope>test</scope>
+        </dependency>
+      </dependencies>
+      <build>
+        <pluginManagement><plugins><plugin>
+          <groupId>org.teavm</groupId><artifactId>teavm-maven-plugin</artifactId>
+          <dependencies><dependency>
+            <groupId>io.instanto</groupId><artifactId>instanto-teavm-core-patch</artifactId>
+            <version>${instanto-teavm.version}</version>
+          </dependency></dependencies>
+        </plugin></plugins></pluginManagement>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId>
+            <configuration>
+              <!-- The patch contains the complete upstream core, with only the
+                   faulty pass replaced. Excluding the original avoids depending
+                   on a consumer's project dependency declaration order. -->
+              <classpathDependencyExcludes>
+                <classpathDependencyExclude>org.teavm:teavm-core</classpathDependencyExclude>
+              </classpathDependencyExcludes>
+            </configuration>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId><artifactId>maven-enforcer-plugin</artifactId>
+            <executions><execution>
+              <id>class-init-patch-version</id><phase>validate</phase><goals><goal>enforce</goal></goals>
+              <configuration><rules><requireProperty>
+                <property>teavm.version</property><regex>0\.16\.0</regex>
+                <message>The class initialization patch requires TeaVM 0.16.0; disable teavm-class-init-fix before changing TeaVM versions.</message>
+                <regexMessage>The class initialization patch requires TeaVM 0.16.0; disable teavm-class-init-fix before changing TeaVM versions.</regexMessage>
+              </requireProperty></rules></configuration>
+            </execution></executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <!-- Select this only in modules containing TeaVM browser tests. The extension
+         is still a separate dependency, and its checks are still opt-in. -->
+    <profile>
+      <id>teavm-browser-tests</id>
+      <properties>
+        <teavm.junit.js>true</teavm.junit.js>
+        <teavm.junit.wasm-gc>true</teavm.junit.wasm-gc>
+        <teavm.junit.c>false</teavm.junit.c>
+        <teavm.junit.optimized>true</teavm.junit.optimized>
+        <teavm.junit.minified>true</teavm.junit.minified>
+      </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-surefire-plugin</artifactId>
+            <configuration>
+              <systemPropertyVariables>
+                <teavm.junit.target>${project.build.directory}/teavm-tests</teavm.junit.target>
+                <teavm.junit.js>${teavm.junit.js}</teavm.junit.js>
+                <teavm.junit.wasm-gc>${teavm.junit.wasm-gc}</teavm.junit.wasm-gc>
+                <teavm.junit.c>${teavm.junit.c}</teavm.junit.c>
+                <teavm.junit.optimized>${teavm.junit.optimized}</teavm.junit.optimized>
+                <teavm.junit.minified>${teavm.junit.minified}</teavm.junit.minified>
+                <teavm.junit.js.runner>browser-chrome</teavm.junit.js.runner>
+                <teavm.junit.wasm-gc.runner>browser-chrome</teavm.junit.wasm-gc.runner>
+              </systemPropertyVariables>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 </project>

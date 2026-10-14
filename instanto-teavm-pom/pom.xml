@@ -193,23 +193,35 @@
           <version>${instanto-teavm.version}</version>
           <scope>test</scope>
         </dependency>
+        <!-- TeaVM loads its JSO implementation from the project's classpath, not the
+             plugin's, and does not order that classpath by declaration. So this patch
+             is a provided dependency, and teavm-classlib is managed below without the
+             upstream teavm-jso-impl, leaving the patch as the only implementation. -->
         <dependency>
           <groupId>io.instanto</groupId>
           <artifactId>instanto-teavm-jso-patch</artifactId>
           <version>${instanto-teavm.version}</version>
-          <scope>test</scope>
+          <scope>provided</scope>
         </dependency>
       </dependencies>
+      <dependencyManagement>
+        <dependencies>
+          <dependency>
+            <groupId>org.teavm</groupId>
+            <artifactId>teavm-classlib</artifactId>
+            <version>${teavm.version}</version>
+            <exclusions>
+              <exclusion><groupId>org.teavm</groupId><artifactId>teavm-jso-impl</artifactId></exclusion>
+            </exclusions>
+          </dependency>
+        </dependencies>
+      </dependencyManagement>
       <build>
         <pluginManagement><plugins><plugin>
           <groupId>org.teavm</groupId><artifactId>teavm-maven-plugin</artifactId>
           <dependencies>
             <dependency>
               <groupId>io.instanto</groupId><artifactId>instanto-teavm-core-patch</artifactId>
-              <version>${instanto-teavm.version}</version>
-            </dependency>
-            <dependency>
-              <groupId>io.instanto</groupId><artifactId>instanto-teavm-jso-patch</artifactId>
               <version>${instanto-teavm.version}</version>
             </dependency>
           </dependencies>

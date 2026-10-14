@@ -29,9 +29,11 @@
                  Managed versions for instanto-teavm-classlib (missing class
                  library methods and fixes) and instanto-teavm-extensions (JUnit
                  rule support, opt-in ThreadLocal checks), which a module adds
-                 as a dependency when it wants them. Two opt-in profiles:
-                 teavm-class-init-fix, the patched TeaVM core for exception-safe
-                 class initialisation, and teavm-browser-tests.
+                 as a dependency when it wants them. The teavm-compiler-fixes
+                 profile, on unless -Dinstanto.teavm.stockCompiler is set, puts
+                 the patched TeaVM core and JSO implementation in place of
+                 upstream's for compiles and tests. The opt-in
+                 teavm-browser-tests profile runs compiled tests in Chrome.
        Requires  Source archives for the libraries an application compiles,
                  which instanto-org-pom attaches to every build.
        Not here  The rest of TeaVM build configuration. Targets, optimisation
@@ -173,10 +175,17 @@
     </pluginManagement>
   </build>
   <profiles>
-    <!-- Explicit, version-bound compiler replacement. No application dependency
-         on Sarto or JUnit is introduced by enabling this profile. -->
+    <!-- Version-bound compiler corrections from instanto-teavm, on for every build:
+         instanto-teavm-core-patch keeps class initialisation on exception paths, and
+         instanto-teavm-jso-patch makes @JSTopLevel calls plain global calls instead of
+         calls on null. Each is the complete upstream 0.16.0 jar with the faulty classes
+         replaced. No application dependency on Sarto or JUnit is introduced. Build with
+         -Dinstanto.teavm.stockCompiler to use upstream TeaVM unchanged. -->
     <profile>
-      <id>teavm-class-init-fix</id>
+      <id>teavm-compiler-fixes</id>
+      <activation>
+        <property><name>!instanto.teavm.stockCompiler</name></property>
+      </activation>
       <dependencies>
         <dependency>
           <groupId>io.instanto</groupId>
@@ -184,35 +193,48 @@
           <version>${instanto-teavm.version}</version>
           <scope>test</scope>
         </dependency>
+        <dependency>
+          <groupId>io.instanto</groupId>
+          <artifactId>instanto-teavm-jso-patch</artifactId>
+          <version>${instanto-teavm.version}</version>
+          <scope>test</scope>
+        </dependency>
       </dependencies>
       <build>
         <pluginManagement><plugins><plugin>
           <groupId>org.teavm</groupId><artifactId>teavm-maven-plugin</artifactId>
-          <dependencies><dependency>
-            <groupId>io.instanto</groupId><artifactId>instanto-teavm-core-patch</artifactId>
-            <version>${instanto-teavm.version}</version>
-          </dependency></dependencies>
+          <dependencies>
+            <dependency>
+              <groupId>io.instanto</groupId><artifactId>instanto-teavm-core-patch</artifactId>
+              <version>${instanto-teavm.version}</version>
+            </dependency>
+            <dependency>
+              <groupId>io.instanto</groupId><artifactId>instanto-teavm-jso-patch</artifactId>
+              <version>${instanto-teavm.version}</version>
+            </dependency>
+          </dependencies>
         </plugin></plugins></pluginManagement>
         <plugins>
           <plugin>
             <groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId>
             <configuration>
-              <!-- The patch contains the complete upstream core, with only the
-                   faulty pass replaced. Excluding the original avoids depending
+              <!-- Each patch contains the complete upstream jar, with only the
+                   faulty classes replaced. Excluding the originals avoids depending
                    on a consumer's project dependency declaration order. -->
               <classpathDependencyExcludes>
                 <classpathDependencyExclude>org.teavm:teavm-core</classpathDependencyExclude>
+                <classpathDependencyExclude>org.teavm:teavm-jso-impl</classpathDependencyExclude>
               </classpathDependencyExcludes>
             </configuration>
           </plugin>
           <plugin>
             <groupId>org.apache.maven.plugins</groupId><artifactId>maven-enforcer-plugin</artifactId>
             <executions><execution>
-              <id>class-init-patch-version</id><phase>validate</phase><goals><goal>enforce</goal></goals>
+              <id>teavm-compiler-fixes-version</id><phase>validate</phase><goals><goal>enforce</goal></goals>
               <configuration><rules><requireProperty>
                 <property>teavm.version</property><regex>0\.16\.0</regex>
-                <message>The class initialization patch requires TeaVM 0.16.0; disable teavm-class-init-fix before changing TeaVM versions.</message>
-                <regexMessage>The class initialization patch requires TeaVM 0.16.0; disable teavm-class-init-fix before changing TeaVM versions.</regexMessage>
+                <message>The TeaVM compiler fixes require TeaVM 0.16.0; build with -Dinstanto.teavm.stockCompiler before changing TeaVM versions.</message>
+                <regexMessage>The TeaVM compiler fixes require TeaVM 0.16.0; build with -Dinstanto.teavm.stockCompiler before changing TeaVM versions.</regexMessage>
               </requireProperty></rules></configuration>
             </execution></executions>
           </plugin>

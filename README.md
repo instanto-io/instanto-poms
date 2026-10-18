@@ -6,7 +6,7 @@ project. Each parent POM describes its managed plugins and properties.
 
 | Parent | Role |
 |---|---|
-| `io.instanto:instanto-org-pom` | The build contract for every Instanto project: Java 21, pinned plugin versions, Spotless, SpotBugs, source and Javadoc archives, release profiles. |
+| `io.instanto:instanto-org-pom` | The build contract for every Instanto project: Java 21, pinned plugin versions, Spotless, SpotBugs, JaCoCo coverage, source and Javadoc archives, release profiles. |
 | `io.instanto:instanto-teavm-pom` | Adds TeaVM for browser projects: one TeaVM version, managed dependencies, and source maps with the Java files needed to debug them. |
 
 ## Use a parent
@@ -23,6 +23,28 @@ it does not carry the TeaVM property or plugin configuration.
 Each child project supplies its own name and SCM address. See the
 [parent POM](pom.xml) and [TeaVM parent](instanto-teavm-pom/pom.xml)
 for the current settings.
+
+## Test coverage
+
+The organisation parent collects coverage from forked Surefire test JVMs.
+`mvn clean test` writes each tested module's report to
+`target/site/jacoco/jacoco.xml`, which Sonar discovers automatically; the HTML
+report is alongside it in `index.html`. Reporting runs after unit tests in the
+`test` phase so consumers using `clean test` before Sonar analysis are covered.
+No module-specific JaCoCo plugin declaration is needed.
+
+Existing JVM options supplied through the `argLine` Maven property (including
+`-DargLine=...`) are retained. A project overriding Surefire's **configuration**
+`<argLine>` must include `@{instanto.coverage.argLine}` before its own options.
+Use `-Djacoco.skip=true` to disable collection and reporting. Tests must run in
+a forked JVM; `forkCount=0` cannot collect agent coverage.
+
+This measures JVM code, including TeaVM compiler extensions. It does not measure
+generated JavaScript or Wasm running in a browser, or separate integration-test
+processes. Coverage percentages therefore do not describe browser test coverage.
+
+Run `python3 src/it/verify-coverage.py` to check report generation, per-module
+paths, custom JVM options and the coverage opt-out against the local parent.
 
 ## Shared CI
 

@@ -125,6 +125,10 @@
     <central-publishing-maven-plugin.version>0.11.0</central-publishing-maven-plugin.version>
     <sonar-maven-plugin.version>5.8.0.7211</sonar-maven-plugin.version>
     <sonar.host.url>https://sonar.instanto.io</sonar.host.url>
+    <jacoco.version>0.8.15</jacoco.version>
+    <!-- Keep test JVM options separate from the agent, including when coverage is skipped. -->
+    <argLine/>
+    <instanto.coverage.argLine/>
   </properties>
 
   <!-- No library dependencies or BOM imports belong in this parent. -->
@@ -159,6 +163,29 @@
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-surefire-plugin</artifactId>
           <version>${maven-surefire-plugin.version}</version>
+          <configuration>
+            <argLine>@{instanto.coverage.argLine} ${argLine}</argLine>
+          </configuration>
+        </plugin>
+        <plugin>
+          <groupId>org.jacoco</groupId>
+          <artifactId>jacoco-maven-plugin</artifactId>
+          <version>${jacoco.version}</version>
+          <executions>
+            <execution>
+              <id>prepare-coverage</id>
+              <goals><goal>prepare-agent</goal></goals>
+              <configuration>
+                <propertyName>instanto.coverage.argLine</propertyName>
+              </configuration>
+            </execution>
+            <execution>
+              <id>report-coverage</id>
+              <!-- Some consumers run clean test before the separate Sonar step. -->
+              <phase>test</phase>
+              <goals><goal>report</goal></goals>
+            </execution>
+          </executions>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
@@ -302,6 +329,10 @@
          Sources and javadoc are attached for every build, snapshot included.
          Only signing is gated, by the sign-release profile. -->
     <plugins>
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+      </plugin>
       <plugin>
         <groupId>com.diffplug.spotless</groupId>
         <artifactId>spotless-maven-plugin</artifactId>

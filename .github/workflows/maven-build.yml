@@ -85,6 +85,12 @@ on:
       FORGEJO_PACKAGE_TOKEN:
         description: Token for that Forgejo account.
         required: false
+      FORGEJO_PACKAGES_TOKEN:
+        description: Fallback token name for that Forgejo account.
+        required: false
+      FORGEJO_PACKAGE_READ_TOKEN:
+        description: Fallback read token name for that Forgejo account.
+        required: false
       ARTIFACTS_USERNAME:
         description: Nexus account at artifacts.instanto.io, for jobs that deploy there.
         required: false
@@ -107,7 +113,7 @@ jobs:
       MAVEN_TOKEN: ${{ secrets.PACKAGES_TOKEN || github.token }}
       MAVEN_ACTOR: ${{ github.actor }}
       FORGEJO_PACKAGE_USER: ${{ secrets.FORGEJO_PACKAGE_USER }}
-      FORGEJO_PACKAGE_TOKEN: ${{ secrets.FORGEJO_PACKAGE_TOKEN }}
+      FORGEJO_PACKAGE_TOKEN: ${{ secrets.FORGEJO_PACKAGE_TOKEN || secrets.FORGEJO_PACKAGES_TOKEN || secrets.FORGEJO_PACKAGE_READ_TOKEN }}
       ARTIFACTS_USERNAME: ${{ secrets.ARTIFACTS_USERNAME }}
       ARTIFACTS_TOKEN: ${{ secrets.ARTIFACTS_TOKEN }}
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

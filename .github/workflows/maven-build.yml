@@ -71,6 +71,10 @@ on:
         description: Path of the build output to upload, when artifact-name is set.
         type: string
         default: ''
+      sonar:
+        description: Run SonarQube analysis after verification when SONAR_TOKEN is present.
+        type: boolean
+        default: true
     secrets:
       PACKAGES_TOKEN:
         description: Token with read access to the organisation's private packages and repositories.
@@ -86,6 +90,9 @@ on:
         required: false
       ARTIFACTS_TOKEN:
         description: Password or token for that Nexus account.
+        required: false
+      SONAR_TOKEN:
+        description: SonarQube analysis token for sonar.instanto.io.
         required: false
 
 permissions:
@@ -103,6 +110,8 @@ jobs:
       FORGEJO_PACKAGE_TOKEN: ${{ secrets.FORGEJO_PACKAGE_TOKEN }}
       ARTIFACTS_USERNAME: ${{ secrets.ARTIFACTS_USERNAME }}
       ARTIFACTS_TOKEN: ${{ secrets.ARTIFACTS_TOKEN }}
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_HOST_URL: https://sonar.instanto.io
     steps:
       # Self-hosted machines are provisioned by hand and differ; record what
       # this one offers so a failure caused by the machine is visible as such.
@@ -115,6 +124,8 @@ jobs:
           done
 
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       # overwrite-settings is off because self-hosted runners keep their home
       # directory between jobs; credentials go to a job-local file instead.
@@ -211,6 +222,13 @@ jobs:
           "$MVN" --settings "$MAVEN_SETTINGS" --batch-mode --no-transfer-progress --errors --fail-at-end \
             --update-snapshots \
             ${{ inputs.maven-args }} ${{ inputs.goals }}
+
+      - name: SonarQube Quality Gate
+        if: inputs.sonar && env.SONAR_TOKEN != '' && !contains(inputs.goals, 'deploy')
+        run: |
+          set -euo pipefail
+          "$MVN" --settings "$MAVEN_SETTINGS" --batch-mode --no-transfer-progress \
+            sonar:sonar -Dsonar.qualitygate.wait=true
 
       - name: Upload ${{ inputs.artifact-name }}
         if: inputs.artifact-name != ''

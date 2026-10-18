@@ -2,6 +2,7 @@
 """Exercise inherited coverage with real forked tests, without publishing parents."""
 
 from pathlib import Path
+import os
 import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
@@ -27,6 +28,7 @@ def run(fixture, name, *options):
     with log.open("w") as output:
         result = subprocess.run(
             ["mvn", "-B", "-ntp", "-f", str(fixture / "pom.xml"),
+             "-Dmaven.repo.local=" + str(fixture / ".m2"),
              "clean", "test", "-Dspotless.skip=true", "-Dspotbugs.skip=true", *options],
             stdout=output, stderr=subprocess.STDOUT,
         )
@@ -49,12 +51,12 @@ def run(fixture, name, *options):
 
 
 with tempfile.TemporaryDirectory(prefix="instanto-coverage-") as directory:
-    fixture = Path(directory)
+    fixture = Path(directory).resolve()
     write(fixture / "pom.xml", pom(f"""
       <parent>
         <groupId>io.instanto</groupId><artifactId>instanto-org-pom</artifactId>
         <version>0.1.0-SNAPSHOT</version>
-        <relativePath>{escape(str(ROOT / 'pom.xml'))}</relativePath>
+        <relativePath>{escape(os.path.relpath(ROOT / 'pom.xml', fixture))}</relativePath>
       </parent>
       <artifactId>coverage-inheritance-fixture</artifactId><packaging>pom</packaging>
       <modules><module>plain</module><module>custom</module></modules>

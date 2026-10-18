@@ -233,8 +233,12 @@ jobs:
         if: inputs.sonar && env.SONAR_TOKEN != '' && !contains(inputs.goals, 'deploy')
         run: |
           set -euo pipefail
+          repo_name="${GITHUB_REPOSITORY#*/}"
           "$MVN" --settings "$MAVEN_SETTINGS" --batch-mode --no-transfer-progress \
-            sonar:sonar -Dsonar.qualitygate.wait=true
+            sonar:sonar \
+            -Dsonar.projectKey="$repo_name" \
+            -Dsonar.projectName="$repo_name" \
+            -Dsonar.qualitygate.wait=true
 
       - name: Upload ${{ inputs.artifact-name }}
         if: inputs.artifact-name != ''

@@ -26,6 +26,8 @@
                  declare them without a <version>; a pluginManagement pin for
                  teavm-maven-plugin, which also makes every TeaVM compile
                  write a source map and copy the Java sources it maps to.
+                 Compiler minification is disabled; applications can opt into
+                 the managed Terser execution for their final assets.
                  Managed versions for instanto-teavm-classlib (missing class
                  library methods and fixes) and instanto-teavm-extensions (JUnit
                  rule support, opt-in ThreadLocal checks), which a module adds
@@ -51,6 +53,14 @@
     <!-- Instanto's TeaVM additions, published from instanto-io/instanto-teavm. -->
     <instanto-teavm.version>0.1.0-SNAPSHOT</instanto-teavm.version>
     <instanto.teavm.threadLocalChecks>false</instanto.teavm.threadLocalChecks>
+    <!-- JavaScript is minified after compilation, with Terser. Applications opt
+         in by setting the directory, filename and lifecycle phase below. -->
+    <instanto.terser.version>5.51.2</instanto.terser.version>
+    <instanto.terser.executable>npx</instanto.terser.executable>
+    <instanto.terser.phase>none</instanto.terser.phase>
+    <instanto.terser.skip>false</instanto.terser.skip>
+    <instanto.terser.directory>${project.build.directory}/javascript</instanto.terser.directory>
+    <instanto.terser.file>classes.js</instanto.terser.file>
   </properties>
 
   <dependencyManagement>
@@ -164,12 +174,46 @@
           <artifactId>teavm-maven-plugin</artifactId>
           <version>${teavm.version}</version>
           <configuration>
+            <minifying>false</minifying>
             <sourceMapsGenerated>true</sourceMapsGenerated>
             <sourceFilesCopied>true</sourceFilesCopied>
             <properties>
               <instanto.teavm.threadLocalChecks>${instanto.teavm.threadLocalChecks}</instanto.teavm.threadLocalChecks>
             </properties>
           </configuration>
+        </plugin>
+        <!-- Declare this plugin after TeaVM in an application's build. Keeping
+             the filename and composing its source map preserves asset URLs and
+             Java debugging. No property mangling or top-level renaming. -->
+        <plugin>
+          <groupId>org.codehaus.mojo</groupId>
+          <artifactId>exec-maven-plugin</artifactId>
+          <version>3.6.3</version>
+          <executions>
+            <execution>
+              <id>minify-teavm-js</id>
+              <phase>${instanto.terser.phase}</phase>
+              <goals><goal>exec</goal></goals>
+              <configuration combine.self="override">
+                <skip>${instanto.terser.skip}</skip>
+                <executable>${instanto.terser.executable}</executable>
+                <workingDirectory>${instanto.terser.directory}</workingDirectory>
+                <arguments>
+                  <argument>--yes</argument>
+                  <argument>--package=terser@${instanto.terser.version}</argument>
+                  <argument>--</argument>
+                  <argument>terser</argument>
+                  <argument>${instanto.terser.file}</argument>
+                  <argument>--compress</argument>
+                  <argument>--mangle</argument>
+                  <argument>--source-map</argument>
+                  <argument>content='${instanto.terser.file}.map',url='${instanto.terser.file}.map'</argument>
+                  <argument>--output</argument>
+                  <argument>${instanto.terser.file}</argument>
+                </arguments>
+              </configuration>
+            </execution>
+          </executions>
         </plugin>
       </plugins>
     </pluginManagement>
@@ -262,7 +306,7 @@
         <teavm.junit.wasm-gc>true</teavm.junit.wasm-gc>
         <teavm.junit.c>false</teavm.junit.c>
         <teavm.junit.optimized>true</teavm.junit.optimized>
-        <teavm.junit.minified>true</teavm.junit.minified>
+        <teavm.junit.minified>false</teavm.junit.minified>
       </properties>
       <build>
         <plugins>

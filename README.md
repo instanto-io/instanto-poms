@@ -27,8 +27,11 @@ for the current settings.
 ## JavaScript assets
 
 The TeaVM parent disables the compiler's minification. Keep TeaVM optimisation
-enabled as appropriate; Terser handles the final JavaScript names and compression.
-The managed `exec-maven-plugin` execution uses Terser **5.51.2** through `npx`.
+enabled as appropriate; Terser handles the final JavaScript names and compression,
+in a release build only. Every other build deploys readable JavaScript with its
+source maps; build with `-Prelease` for a final release, which also requires
+release versions. The managed `exec-maven-plugin` execution uses Terser
+**5.51.2** through `npx`.
 Build machines need Node.js and npm on `PATH`; the first invocation downloads
 Terser into npm's cache. No global Terser installation is needed.
 

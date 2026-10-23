@@ -26,8 +26,10 @@
                  declare them without a <version>; a pluginManagement pin for
                  teavm-maven-plugin, which also makes every TeaVM compile
                  write a source map and copy the Java sources it maps to.
-                 Compiler minification is disabled; applications can opt into
-                 the managed Terser execution for their final assets.
+                 TeaVM's own minification is off. Applications can opt into the
+                 managed Terser execution, which runs only in a release build
+                 (-Prelease), so everyday builds deploy readable JavaScript
+                 with its source maps.
                  Managed versions for instanto-teavm-classlib (missing class
                  library methods and fixes) and instanto-teavm-extensions (JUnit
                  rule support, opt-in ThreadLocal checks), which a module adds
@@ -53,12 +55,13 @@
     <!-- Instanto's TeaVM additions, published from instanto-io/instanto-teavm. -->
     <instanto-teavm.version>0.1.0-SNAPSHOT</instanto-teavm.version>
     <instanto.teavm.threadLocalChecks>false</instanto.teavm.threadLocalChecks>
-    <!-- JavaScript is minified after compilation, with Terser. Applications opt
-         in by setting the directory, filename and lifecycle phase below. -->
+    <!-- JavaScript is minified after compilation, with Terser, in a release build
+         only. Applications opt in by setting the directory, filename and lifecycle
+         phase below; the release profile turns it on. -->
     <instanto.terser.version>5.51.2</instanto.terser.version>
     <instanto.terser.executable>npx</instanto.terser.executable>
     <instanto.terser.phase>none</instanto.terser.phase>
-    <instanto.terser.skip>false</instanto.terser.skip>
+    <instanto.terser.skip>true</instanto.terser.skip>
     <instanto.terser.directory>${project.build.directory}/javascript</instanto.terser.directory>
     <instanto.terser.file>classes.js</instanto.terser.file>
   </properties>
@@ -328,6 +331,13 @@
           </plugin>
         </plugins>
       </build>
+    </profile>
+    <!-- A final release minifies its JavaScript; every other build leaves it readable. -->
+    <profile>
+      <id>release</id>
+      <properties>
+        <instanto.terser.skip>false</instanto.terser.skip>
+      </properties>
     </profile>
   </profiles>
 </project>

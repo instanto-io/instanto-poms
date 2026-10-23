@@ -117,10 +117,13 @@ for name, module_type, filename in [('classic', 'UMD', 'bundle.js'), ('module sp
     # Maven artifact IDs cannot contain spaces, but paths and asset names can.
     p = folder / 'pom.xml'
     p.write_text(p.read_text().replace('<artifactId>terser-module space</artifactId>', '<artifactId>terser-module-space</artifactId>'))
-    log = build(folder, name + '-minified')
+    # A release build turns Terser on; the release profile also demands release versions,
+    # which this snapshot fixture is not, so the switch it sets is set directly.
+    log = build(folder, name + '-minified', '-Dinstanto.terser.skip=false')
     assert log.index('(compile-js)') < log.index('(minify-teavm-js)')
     size = check(folder, filename, module_type == 'ES2015')
-    log = build(folder, name + '-skipped', '-Dinstanto.terser.skip=true')
+    # Every other build leaves TeaVM's output readable.
+    log = build(folder, name + '-readable')
     original = check(folder, filename, module_type == 'ES2015')
     assert size < original, (size, original)
     results.append({'fixture': name, 'original_bytes': original, 'minified_bytes': size})

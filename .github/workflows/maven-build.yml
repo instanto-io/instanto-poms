@@ -97,6 +97,9 @@ on:
       ARTIFACTS_TOKEN:
         description: Password or token for that Nexus account.
         required: false
+      SONAR_READ_TOKEN:
+        description: Optional SonarQube token with Browse permission for failure diagnostics.
+        required: false
       SONAR_TOKEN:
         description: SonarQube analysis token for sonar.instanto.io.
         required: false
@@ -117,6 +120,7 @@ jobs:
       ARTIFACTS_USERNAME: ${{ secrets.ARTIFACTS_USERNAME }}
       ARTIFACTS_TOKEN: ${{ secrets.ARTIFACTS_TOKEN }}
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_READ_TOKEN: ${{ secrets.SONAR_READ_TOKEN }}
       SONAR_HOST_URL: https://sonar.instanto.io
     steps:
       # Self-hosted machines are provisioned by hand and differ; record what
@@ -245,15 +249,21 @@ jobs:
         continue-on-error: true
         run: |
           python3 - <<'PYSONAR'
-          import json, os, pathlib, urllib.parse, urllib.request
+          import json, os, pathlib, urllib.error, urllib.parse, urllib.request
           host = os.environ["SONAR_HOST_URL"].rstrip("/")
-          token = os.environ["SONAR_TOKEN"]
+          token = os.environ.get("SONAR_READ_TOKEN") or os.environ["SONAR_TOKEN"]
           project = os.environ["GITHUB_REPOSITORY"].split("/")[-1]
           def get(path, **params):
               url = host + path + "?" + urllib.parse.urlencode(params)
               request = urllib.request.Request(url, headers={"Authorization": "Bearer " + token})
-              with urllib.request.urlopen(request, timeout=30) as response:
-                  return json.load(response)
+              try:
+                  with urllib.request.urlopen(request, timeout=30) as response:
+                      return json.load(response)
+              except urllib.error.HTTPError as error:
+                  if error.code in (401, 403):
+                      print("::warning::Sonar analysis token cannot read diagnostics. Supply SONAR_READ_TOKEN with Browse permission or inspect the project dashboard.")
+                      raise SystemExit(0) from None
+                  raise
           report = pathlib.Path("target/sonar/report-task.txt")
           if not report.exists():
               print("No Sonar report task: the scanner failed before submitting analysis.")

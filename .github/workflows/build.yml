@@ -36,7 +36,8 @@ jobs:
 
   coverage-inheritance:
     name: Verify inherited test coverage
-    runs-on: ubuntu-latest
+    # Report publication needs the private packages.instanto.io network.
+    runs-on: [self-hosted, instanto-container]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
@@ -45,12 +46,14 @@ jobs:
           java-version: '21'
       - name: Check coverage reports and test JVM options
         run: python3 src/it/verify-coverage.py
-      - name: Upload verification logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-inheritance-logs
-          path: target/coverage-inheritance/*.log
+      - name: Publish verification logs to packages.instanto.io
+        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        env:
+          FORGEJO_PACKAGE_USER: ${{ secrets.FORGEJO_PACKAGE_USER }}
+          FORGEJO_PACKAGE_TOKEN: ${{ secrets.FORGEJO_PACKAGE_TOKEN || secrets.FORGEJO_PACKAGES_TOKEN }}
+        run: >-
+          python3 .github/scripts/publish_report.py --name coverage-inheritance-logs
+          --path 'target/coverage-inheritance/*.log'
 
   terser-inheritance:
     name: Verify TeaVM and Terser asset packaging
@@ -66,14 +69,15 @@ jobs:
           node-version: '22'
       - name: Check minified exports, source maps and packaged assets
         run: python3 src/it/verify-terser.py
-      - name: Upload verification logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: terser-inheritance-logs
-          path: |
-            target/terser-inheritance/*.log
-            target/terser-inheritance/results.json
+      - name: Publish verification logs to packages.instanto.io
+        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        env:
+          FORGEJO_PACKAGE_USER: ${{ secrets.FORGEJO_PACKAGE_USER }}
+          FORGEJO_PACKAGE_TOKEN: ${{ secrets.FORGEJO_PACKAGE_TOKEN || secrets.FORGEJO_PACKAGES_TOKEN }}
+        run: >-
+          python3 .github/scripts/publish_report.py --name terser-inheritance-logs
+          --path 'target/terser-inheritance/*.log'
+          --path target/terser-inheritance/results.json
 
   publish-snapshot:
     if: github.repository == 'instanto-io/instanto-poms' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'

@@ -128,14 +128,15 @@ jobs:
             --workspace "$DOWNSTREAM_WORKSPACE" \
             "${extra_args[@]}"
 
-      - name: Upload downstream results and logs
+      - name: Publish downstream results and logs to packages.instanto.io
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: downstream-compatibility
-          path: ${{ env.DOWNSTREAM_WORKSPACE }}/reports/
-          if-no-files-found: ignore
-          retention-days: 14
+        env:
+          # Publication requires write access; never silently fall back to a read token.
+          FORGEJO_PACKAGE_TOKEN: ${{ secrets.FORGEJO_PACKAGE_TOKEN || secrets.FORGEJO_PACKAGES_TOKEN }}
+        run: >-
+          python3 tooling/.github/scripts/publish_report.py
+          --name downstream-compatibility
+          --path "$DOWNSTREAM_WORKSPACE/reports"
 
       - name: Remove the job-local checkout and Maven cache
         if: always() && env.DOWNSTREAM_WORKSPACE != ''

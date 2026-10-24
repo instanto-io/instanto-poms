@@ -162,8 +162,20 @@ before their compatibility can be checked. Conservative optional-module edges ca
 schedule more builds than a single default Maven reactor strictly needs.
 
 Each run pins consumer default-branch commits before building and records their SHAs
-in the job summary and `downstream-compatibility` artifact, alongside per-build logs.
-It installs the exact upstream checkout into a fresh job-local Maven repository, then
+in the job summary and job log. Per-build logs, JSON results and the summary are
+published as a `downstream-compatibility.tar.gz` generic package on
+packages.instanto.io, with a download link and SHA-256 in the job summary. The parent
+coverage and Terser verification logs use the same storage. These diagnostics no
+longer consume GitHub Actions artifact storage; the optional `artifact-name` output
+for workflows that exchange build outputs through GitHub remains unchanged.
+
+Packages use `ci-<repository-owner>-<repository-name>-<report-name>` and version
+`<run-id>-<run-attempt>`, so reruns do not overwrite previous evidence. The publisher
+downloads the uploaded archive and verifies its checksum before reporting success.
+Forgejo package retention is managed on the registry; GitHub artifact retention does
+not apply. Existing GitHub artifacts are not deleted by this workflow.
+
+The cascade installs the exact upstream checkout into a fresh job-local Maven repository, then
 builds consumers with remote snapshot updates disabled. Consumers run `clean install`,
 including tests; catalog `checks` add the browser profiles for scene, graphics and model.
 No consumer artifacts are deployed and no other workflow is dispatched, so there are
@@ -178,7 +190,11 @@ A failed group blocks its downstream groups while independent groups continue.
 
 The caller's `PACKAGES_TOKEN` needs read access to private consumer repositories
 (including `cstainton/ports`) and packages. Its job token alone normally cannot read
-other private repositories. Existing Forgejo/Nexus read credentials are reused.
+other private repositories. Existing Forgejo/Nexus read credentials are reused for
+Maven. Publishing reports additionally requires `FORGEJO_PACKAGE_USER` and
+`FORGEJO_PACKAGE_TOKEN` (or `FORGEJO_PACKAGES_TOKEN`) with package-write access to the
+`instanto-io` owner. A read-only token cannot publish reports. Registry failures remain
+visible failures, and the revision/result table stays in the job log and summary.
 Missing access fails visibly. The job does not need dispatch or repository write access.
 Runners must support the consumers' browser and native build requirements.
 

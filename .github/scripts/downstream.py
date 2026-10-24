@@ -204,6 +204,8 @@ def report(output, upstream, revisions, groups, results):
     lines += ["", "All builds use a job-local Maven repository; no downstream artifacts are published.",
               "Repository cycles are installed once and verified again as a group. A failed group blocks its dependants."]
     summary = "\n".join(lines) + "\n"
+    # Preserve the revision/result table in the job log even if report storage fails.
+    print(summary, flush=True)
     (output / "summary.md").write_text(summary)
     if os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as stream:

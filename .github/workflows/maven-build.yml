@@ -240,6 +240,40 @@ jobs:
             -Dsonar.projectName="$repo_name" \
             -Dsonar.qualitygate.wait=true
 
+      - name: Explain failed SonarQube quality gate
+        if: failure() && inputs.sonar && env.SONAR_TOKEN != '' && !contains(inputs.goals, 'deploy')
+        continue-on-error: true
+        run: |
+          python3 - <<'PYSONAR'
+          import json, os, pathlib, urllib.parse, urllib.request
+          host = os.environ["SONAR_HOST_URL"].rstrip("/")
+          token = os.environ["SONAR_TOKEN"]
+          project = os.environ["GITHUB_REPOSITORY"].split("/")[-1]
+          def get(path, **params):
+              url = host + path + "?" + urllib.parse.urlencode(params)
+              request = urllib.request.Request(url, headers={"Authorization": "Bearer " + token})
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  return json.load(response)
+          report = pathlib.Path("target/sonar/report-task.txt")
+          if not report.exists():
+              print("No Sonar report task: the scanner failed before submitting analysis.")
+              raise SystemExit(0)
+          properties = dict(line.split("=", 1) for line in report.read_text().splitlines() if "=" in line)
+          task = get("/api/ce/task", id=properties["ceTaskId"])["task"]
+          analysis = task.get("analysisId")
+          if not analysis:
+              print("Sonar task status:", task.get("status"))
+              raise SystemExit(0)
+          gate = get("/api/qualitygates/project_status", analysisId=analysis)["projectStatus"]
+          print("Quality gate:", gate["status"], "analysis:", analysis)
+          for condition in gate.get("conditions", []):
+              print(json.dumps(condition, sort_keys=True))
+          issues = get("/api/issues/search", componentKeys=project, inNewCodePeriod="true", resolved="false", ps=100)
+          print("Open issues in new code:", issues.get("total"))
+          for issue in issues.get("issues", []):
+              print(json.dumps({key: issue.get(key) for key in ("key", "rule", "severity", "component", "line", "message")}, sort_keys=True))
+          PYSONAR
+
       - name: Upload ${{ inputs.artifact-name }}
         if: inputs.artifact-name != ''
         uses: actions/upload-artifact@v4

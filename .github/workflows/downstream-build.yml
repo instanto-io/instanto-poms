@@ -1,0 +1,142 @@
+name: Downstream compatibility
+
+on:
+  workflow_call:
+    inputs:
+      runner-labels:
+        type: string
+        default: '["self-hosted", "instanto-container"]'
+      java-version:
+        type: string
+        default: '21'
+      maven-version:
+        type: string
+        default: 3.9.16
+    secrets:
+      PACKAGES_TOKEN:
+        required: false
+      FORGEJO_PACKAGE_USER:
+        required: false
+      FORGEJO_PACKAGE_TOKEN:
+        required: false
+      FORGEJO_PACKAGES_TOKEN:
+        required: false
+      FORGEJO_PACKAGE_READ_TOKEN:
+        required: false
+      ARTIFACTS_USERNAME:
+        required: false
+      ARTIFACTS_TOKEN:
+        required: false
+  workflow_dispatch:
+    inputs:
+      upstream:
+        description: Registered upstream project to rebuild with its downstream consumers
+        required: true
+        default: sarto-scene
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  compatibility:
+    runs-on: ${{ fromJSON(inputs.runner-labels || '["self-hosted", "instanto-container"]') }}
+    timeout-minutes: 240
+    env:
+      MAVEN_TOKEN: ${{ secrets.PACKAGES_TOKEN || github.token }}
+      MAVEN_ACTOR: ${{ github.actor }}
+      FORGEJO_PACKAGE_USER: ${{ secrets.FORGEJO_PACKAGE_USER }}
+      FORGEJO_PACKAGE_TOKEN: ${{ secrets.FORGEJO_PACKAGE_TOKEN || secrets.FORGEJO_PACKAGES_TOKEN || secrets.FORGEJO_PACKAGE_READ_TOKEN }}
+      ARTIFACTS_USERNAME: ${{ secrets.ARTIFACTS_USERNAME }}
+      ARTIFACTS_TOKEN: ${{ secrets.ARTIFACTS_TOKEN }}
+    steps:
+      - name: Allocate an isolated workspace
+        run: |
+          directory=$(mktemp -d "$RUNNER_TEMP/downstream-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-XXXXXX")
+          echo "DOWNSTREAM_WORKSPACE=$directory/build" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@v7
+        with:
+          path: upstream
+          persist-credentials: false
+
+      - uses: actions/checkout@v7
+        with:
+          repository: instanto-io/instanto-poms
+          ref: main
+          path: tooling
+          token: ${{ secrets.PACKAGES_TOKEN || github.token }}
+          persist-credentials: false
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: ${{ inputs.java-version || '21' }}
+          overwrite-settings: false
+
+      - name: Make Maven available for repositories without a wrapper
+        env:
+          MAVEN_VERSION: ${{ inputs.maven-version || '3.9.16' }}
+        run: |
+          set -euo pipefail
+          if ! command -v mvn >/dev/null 2>&1; then
+            maven_dir="$RUNNER_TEMP/downstream-maven-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+            mkdir -p "$maven_dir"
+            curl -fsSL "https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/${MAVEN_VERSION}/apache-maven-${MAVEN_VERSION}-bin.tar.gz" \
+              | tar -xz --strip-components=1 -C "$maven_dir"
+            echo "$maven_dir/bin" >> "$GITHUB_PATH"
+          fi
+
+      - name: Resolve the upstream checkout
+        id: upstream
+        env:
+          REQUESTED_UPSTREAM: ${{ inputs.upstream }}
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, sys
+          sys.path.insert(0, 'tooling/.github/scripts')
+          from downstream import checkout, load_catalog
+          projects = load_catalog('tooling/.github/downstream-projects.json')
+          # A dispatch on a consuming repository still refers to that repository.
+          # Only this standalone workflow exposes REQUESTED_UPSTREAM.
+          name = os.environ['REQUESTED_UPSTREAM'] or os.environ['GITHUB_REPOSITORY'].split('/')[-1]
+          source = pathlib.Path('upstream').resolve()
+          if os.environ['REQUESTED_UPSTREAM']:
+              if name not in projects:
+                  raise SystemExit('Unknown upstream project: ' + name)
+              source = pathlib.Path('manual-upstream').resolve()
+              checkout(projects[name].get('repository', 'instanto-io/' + name), source)
+          elif name in projects and projects[name].get('repository', 'instanto-io/' + name) != os.environ['GITHUB_REPOSITORY']:
+              raise SystemExit('Calling repository does not match the catalog')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'name={name}\nsource={source}\n')
+          PY
+
+      - name: Build transitive downstream consumers
+        env:
+          UPSTREAM_NAME: ${{ steps.upstream.outputs.name }}
+          UPSTREAM_SOURCE: ${{ steps.upstream.outputs.source }}
+          REQUESTED_UPSTREAM: ${{ inputs.upstream }}
+        run: |
+          set -euo pipefail
+          extra_args=()
+          if [ -n "$REQUESTED_UPSTREAM" ]; then extra_args+=(--verify-upstream); fi
+          python3 tooling/.github/scripts/downstream.py \
+            --catalog tooling/.github/downstream-projects.json \
+            --upstream "$UPSTREAM_NAME" --source "$UPSTREAM_SOURCE" \
+            --workspace "$DOWNSTREAM_WORKSPACE" \
+            "${extra_args[@]}"
+
+      - name: Upload downstream results and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: downstream-compatibility
+          path: ${{ env.DOWNSTREAM_WORKSPACE }}/reports/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Remove the job-local checkout and Maven cache
+        if: always() && env.DOWNSTREAM_WORKSPACE != ''
+        run: rm -rf -- "${DOWNSTREAM_WORKSPACE:?}"

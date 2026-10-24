@@ -143,3 +143,67 @@ Pages, name it and give its path. The upload happens only when the build passes:
       artifact-name: showcase-pages
       artifact-path: showcase/target/site
 ```
+
+### Downstream compatibility
+
+After a successful default-branch `deploy`, the shared workflow builds the registered
+transitive consumers in a separate **Downstream compatibility** job in the same run.
+A failing consumer makes that run fail. A verification or publication failure prevents
+the cascade from starting; publication already completed when downstream checks run.
+These are source compatibility checks, not atomic publication gates.
+
+The catalog in [`.github/downstream-projects.json`](.github/downstream-projects.json)
+records repository dependencies, including parents, integration tests and optional
+modules. It includes `cstainton/ports`, whose reactor contains `gsdk-widgets-emul`.
+Update the catalog when adding a repository or changing an inter-repository dependency;
+this is an explicit registry, not automatic discovery of every GitHub repository.
+An unregistered upstream currently has no downstream work. New consumers must be added
+before their compatibility can be checked. Conservative optional-module edges can
+schedule more builds than a single default Maven reactor strictly needs.
+
+Each run pins consumer default-branch commits before building and records their SHAs
+in the job summary and `downstream-compatibility` artifact, alongside per-build logs.
+It installs the exact upstream checkout into a fresh job-local Maven repository, then
+builds consumers with remote snapshot updates disabled. Consumers run `clean install`,
+including tests; catalog `checks` add the browser profiles for scene, graphics and model.
+No consumer artifacts are deployed and no other workflow is dispatched, so there are
+no recursive runs or cross-repository dispatch credentials.
+
+Repository dependency cycles are grouped: each member is installed once with test
+execution skipped, then every member is built again with tests against the resulting
+artifacts. A bootstrap failure is a real failure; cycles that cannot bootstrap from
+published snapshots need their module/repository boundary or compatibility repaired.
+A failed group blocks its downstream groups while independent groups continue.
+`blocked` never counts as a pass.
+
+The caller's `PACKAGES_TOKEN` needs read access to private consumer repositories
+(including `cstainton/ports`) and packages. Its job token alone normally cannot read
+other private repositories. Existing Forgejo/Nexus read credentials are reused.
+Missing access fails visibly. The job does not need dispatch or repository write access.
+Runners must support the consumers' browser and native build requirements.
+
+To check a project manually, run **Downstream compatibility** in this repository and
+enter its catalog name. Manual runs also test the upstream itself. For a specialised
+publication that should not repeat the cascade (such as a platform matrix), pass
+`downstream-checks: false` and keep it enabled on the main publication. Verification
+jobs never trigger it. The default cascade timeout is four hours.
+
+Run the planner tests with:
+
+```sh
+python3 -m unittest discover -s .github/scripts -p 'test_*.py' -v
+python3 .github/scripts/downstream.py --catalog .github/downstream-projects.json --upstream sarto-scene --plan-only
+python3 .github/scripts/verify_downstream_maven.py
+```
+
+The Maven fixture installs a working upstream snapshot, verifies a consumer, then
+removes the upstream method and proves that the same consumer fails compilation.
+
+### SonarQube diagnostics
+
+Run analysis once on the full reactor. Partial browser-profile jobs should pass
+`sonar: false` to avoid replacing the project's complete analysis and coverage.
+A failed gate remains a failure; the diagnostic step prints its conditions when the
+token has access. An analysis-only token may not have permission to read results.
+In that case provide optional `SONAR_READ_TOKEN` with Browse permission, or inspect
+the project dashboard. Neither the token nor its value is written to build artifacts.

@@ -6,3 +6,5 @@ pom.xml.releaseBackup
 pom.xml.branch
 pom.xml.next
 target/
+
+__pycache__/

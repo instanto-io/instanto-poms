@@ -1,0 +1,308 @@
+{
+  "schema_version": 1,
+  "organisation": "instanto-io",
+  "projects": {
+    "cucumber-tea": {
+      "dependencies": [
+        "sarto-edge"
+      ]
+    },
+    "instanto-poms": {
+      "dependencies": []
+    },
+    "mockatcha": {
+      "dependencies": [
+        "instanto-poms"
+      ]
+    },
+    "ports": {
+      "repository": "cstainton/ports",
+      "dependencies": [
+        "instanto-poms",
+        "sarto",
+        "sarto-async",
+        "sarto-auth",
+        "sarto-cdi",
+        "sarto-codec",
+        "sarto-config",
+        "sarto-events",
+        "sarto-geo",
+        "sarto-geometry",
+        "sarto-graphics",
+        "sarto-model",
+        "sarto-persistence",
+        "sarto-poms",
+        "sarto-resources",
+        "sarto-scene",
+        "sarto-transactions",
+        "sarto-xml",
+        "verrai"
+      ]
+    },
+    "sarto": {
+      "dependencies": [
+        "cucumber-tea",
+        "instanto-poms",
+        "mockatcha",
+        "sarto-async",
+        "sarto-auth",
+        "sarto-cdi",
+        "sarto-codec",
+        "sarto-config",
+        "sarto-edge",
+        "sarto-events",
+        "sarto-graphics",
+        "sarto-model",
+        "sarto-persistence",
+        "sarto-poms",
+        "sarto-relay",
+        "sarto-resources",
+        "sarto-rest",
+        "sarto-scene",
+        "sarto-signals",
+        "sarto-soap",
+        "sarto-transactions",
+        "verrai"
+      ]
+    },
+    "sarto-async": {
+      "dependencies": [
+        "instanto-poms",
+        "sarto-events"
+      ]
+    },
+    "sarto-auth": {
+      "dependencies": [
+        "mockatcha",
+        "sarto-async",
+        "sarto-cdi",
+        "sarto-codec",
+        "sarto-edge",
+        "sarto-poms"
+      ]
+    },
+    "sarto-cdi": {
+      "dependencies": [
+        "instanto-poms",
+        "mockatcha",
+        "sarto-async",
+        "sarto-onejar"
+      ]
+    },
+    "sarto-codec": {
+      "dependencies": [
+        "instanto-poms",
+        "sarto-xml"
+      ]
+    },
+    "sarto-config": {
+      "dependencies": [
+        "sarto-async",
+        "sarto-cdi",
+        "sarto-events",
+        "sarto-poms",
+        "sarto-resources"
+      ]
+    },
+    "sarto-edge": {
+      "dependencies": [
+        "cucumber-tea",
+        "instanto-poms",
+        "mockatcha",
+        "sarto",
+        "sarto-async",
+        "sarto-auth",
+        "sarto-cdi",
+        "sarto-codec",
+        "sarto-grpc",
+        "sarto-persistence",
+        "sarto-rest",
+        "webapp-testkit"
+      ]
+    },
+    "sarto-events": {
+      "dependencies": [
+        "instanto-poms",
+        "mockatcha",
+        "sarto-cdi"
+      ]
+    },
+    "sarto-geo": {
+      "dependencies": [
+        "instanto-poms",
+        "sarto-codec",
+        "sarto-geometry",
+        "sarto-model"
+      ]
+    },
+    "sarto-geometry": {
+      "dependencies": [
+        "instanto-poms",
+        "sarto-codec"
+      ]
+    },
+    "sarto-graphics": {
+      "dependencies": [
+        "cucumber-tea",
+        "sarto-cdi",
+        "sarto-geometry",
+        "sarto-poms"
+      ],
+      "checks": [
+        [
+          "test",
+          "-pl",
+          ":sarto-graphics-viewport,:sarto-graphics-composition-test",
+          "-am",
+          "-Pteavm-tests"
+        ]
+      ]
+    },
+    "sarto-grpc": {
+      "dependencies": [
+        "sarto-async",
+        "sarto-codec"
+      ]
+    },
+    "sarto-model": {
+      "dependencies": [
+        "instanto-poms",
+        "sarto-codec",
+        "sarto-config",
+        "sarto-events",
+        "sarto-geometry",
+        "sarto-signals",
+        "sarto-xml"
+      ],
+      "checks": [
+        [
+          "verify",
+          "-pl",
+          "sarto-model,sarto-model-dat",
+          "-am",
+          "-Pteavm-tests"
+        ]
+      ]
+    },
+    "sarto-onejar": {
+      "dependencies": [
+        "instanto-poms"
+      ]
+    },
+    "sarto-persistence": {
+      "dependencies": [
+        "instanto-poms",
+        "sarto-async",
+        "sarto-onejar"
+      ]
+    },
+    "sarto-poms": {
+      "dependencies": [
+        "instanto-poms"
+      ]
+    },
+    "sarto-relay": {
+      "dependencies": [
+        "instanto-poms",
+        "mockatcha",
+        "sarto",
+        "sarto-auth",
+        "sarto-cdi",
+        "sarto-codec",
+        "sarto-edge",
+        "sarto-events",
+        "sarto-onejar"
+      ]
+    },
+    "sarto-resources": {
+      "dependencies": [
+        "instanto-poms",
+        "sarto-async",
+        "sarto-cdi"
+      ]
+    },
+    "sarto-rest": {
+      "dependencies": [
+        "mockatcha",
+        "sarto-async",
+        "sarto-cdi",
+        "sarto-codec",
+        "sarto-poms"
+      ]
+    },
+    "sarto-scene": {
+      "dependencies": [
+        "cucumber-tea",
+        "instanto-poms",
+        "sarto-events",
+        "sarto-geo",
+        "sarto-geometry",
+        "sarto-graphics",
+        "sarto-model",
+        "sarto-resources",
+        "webapp-testkit"
+      ],
+      "checks": [
+        [
+          "test",
+          "-pl",
+          ":sarto-scene",
+          "-am",
+          "-Pteavm-tests"
+        ]
+      ]
+    },
+    "sarto-signals": {
+      "dependencies": [
+        "instanto-poms",
+        "sarto-cdi",
+        "sarto-events"
+      ]
+    },
+    "sarto-soap": {
+      "dependencies": [
+        "instanto-poms",
+        "sarto-async",
+        "sarto-codec"
+      ]
+    },
+    "sarto-transactions": {
+      "dependencies": [
+        "instanto-poms",
+        "mockatcha",
+        "sarto-async",
+        "sarto-cdi",
+        "sarto-persistence"
+      ]
+    },
+    "sarto-xml": {
+      "dependencies": [
+        "instanto-poms"
+      ]
+    },
+    "verrai": {
+      "dependencies": [
+        "cucumber-tea",
+        "instanto-poms",
+        "mockatcha",
+        "sarto",
+        "sarto-async",
+        "sarto-auth",
+        "sarto-cdi",
+        "sarto-edge",
+        "sarto-events",
+        "sarto-persistence",
+        "sarto-relay",
+        "sarto-rest",
+        "sarto-soap",
+        "webapp-testkit"
+      ]
+    },
+    "webapp-testkit": {
+      "dependencies": [
+        "instanto-poms",
+        "mockatcha"
+      ]
+    }
+  }
+}

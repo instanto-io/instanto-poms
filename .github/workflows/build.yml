@@ -19,6 +19,21 @@ jobs:
       goals: clean verify
     secrets: inherit
 
+  downstream-planner:
+    name: Verify downstream scheduling and Maven artifact propagation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          overwrite-settings: false
+      - name: Check dependency scheduling and failure propagation
+        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py' -v
+      - name: Check a real consumer detects an upstream API break
+        run: python3 .github/scripts/verify_downstream_maven.py
+
   coverage-inheritance:
     name: Verify inherited test coverage
     runs-on: ubuntu-latest
@@ -62,7 +77,7 @@ jobs:
 
   publish-snapshot:
     if: github.repository == 'instanto-io/instanto-poms' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: [verify, coverage-inheritance, terser-inheritance]
+    needs: [verify, coverage-inheritance, terser-inheritance, downstream-planner]
     uses: ./.github/workflows/maven-build.yml
     with:
       name: Publish Maven parent snapshots

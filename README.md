@@ -157,7 +157,10 @@ records repository dependencies, including parents, integration tests and option
 modules. It includes `cstainton/ports`, whose reactor contains `gsdk-widgets-emul`.
 It also tracks `teavm-compat` → `teavm-charba` → `sarto-scene`, so a Charba
 publication verifies Scene and its transitive consumers, including Ports. Playwright
-consumers use the browser engines preinstalled in the container runner image.
+consumers install the engine revisions matching their own Playwright dependency into a
+job-local cache. This avoids mismatches with the container image's preinstalled engines;
+the cache is removed with the isolated downstream workspace. Browser system libraries
+still come from the runner image.
 Tealeaf is another registered consumer of `teavm-compat`, so compatibility-tooling
 changes also rebuild and browser-test its Leaflet port.
 Update the catalog when adding a repository or changing an inter-repository dependency;

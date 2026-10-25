@@ -44,8 +44,9 @@ jobs:
     runs-on: ${{ fromJSON(inputs.runner-labels || '["self-hosted", "instanto-container"]') }}
     timeout-minutes: 240
     env:
-      # Browser ports use the Playwright engines supplied by the runner image.
-      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      # Consumers can pin different Playwright versions. Let each Java driver install its
+      # matching engines into this job's cache instead of assuming /ms-playwright matches.
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '0'
       MAVEN_TOKEN: ${{ secrets.PACKAGES_TOKEN || github.token }}
       MAVEN_ACTOR: ${{ github.actor }}
       FORGEJO_PACKAGE_USER: ${{ secrets.FORGEJO_PACKAGE_USER }}
@@ -57,6 +58,7 @@ jobs:
         run: |
           directory=$(mktemp -d "$RUNNER_TEMP/downstream-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-XXXXXX")
           echo "DOWNSTREAM_WORKSPACE=$directory/build" >> "$GITHUB_ENV"
+          echo "PLAYWRIGHT_BROWSERS_PATH=$directory/build/browser-cache" >> "$GITHUB_ENV"
 
       - uses: actions/checkout@v7
         with:

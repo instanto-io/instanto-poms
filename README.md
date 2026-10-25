@@ -158,6 +158,8 @@ modules. It includes `cstainton/ports`, whose reactor contains `gsdk-widgets-emu
 It also tracks `teavm-compat` → `teavm-charba` → `sarto-scene`, so a Charba
 publication verifies Scene and its transitive consumers, including Ports. Playwright
 consumers use the browser engines preinstalled in the container runner image.
+Tealeaf is another registered consumer of `teavm-compat`, so compatibility-tooling
+changes also rebuild and browser-test its Leaflet port.
 Update the catalog when adding a repository or changing an inter-repository dependency;
 this is an explicit registry, not automatic discovery of every GitHub repository.
 An unregistered upstream currently has no downstream work. New consumers must be added

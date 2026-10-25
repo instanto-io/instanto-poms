@@ -281,6 +281,12 @@
         "instanto-poms"
       ]
     },
+    "tealeaf": {
+      "dependencies": [
+        "instanto-poms",
+        "teavm-compat"
+      ]
+    },
     "teavm-charba": {
       "dependencies": [
         "instanto-poms",

@@ -155,6 +155,9 @@ These are source compatibility checks, not atomic publication gates.
 The catalog in [`.github/downstream-projects.json`](.github/downstream-projects.json)
 records repository dependencies, including parents, integration tests and optional
 modules. It includes `cstainton/ports`, whose reactor contains `gsdk-widgets-emul`.
+It also tracks `teavm-compat` → `teavm-charba` → `sarto-scene`, so a Charba
+publication verifies Scene and its transitive consumers, including Ports. Playwright
+consumers use the browser engines preinstalled in the container runner image.
 Update the catalog when adding a repository or changing an inter-repository dependency;
 this is an explicit registry, not automatic discovery of every GitHub repository.
 An unregistered upstream currently has no downstream work. New consumers must be added

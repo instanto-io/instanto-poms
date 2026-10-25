@@ -44,6 +44,8 @@ jobs:
     runs-on: ${{ fromJSON(inputs.runner-labels || '["self-hosted", "instanto-container"]') }}
     timeout-minutes: 240
     env:
+      # Browser ports use the Playwright engines supplied by the runner image.
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
       MAVEN_TOKEN: ${{ secrets.PACKAGES_TOKEN || github.token }}
       MAVEN_ACTOR: ${{ github.actor }}
       FORGEJO_PACKAGE_USER: ${{ secrets.FORGEJO_PACKAGE_USER }}

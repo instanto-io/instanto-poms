@@ -66,6 +66,16 @@ class DownstreamTests(unittest.TestCase):
     def test_unknown_upstream_has_no_consumers(self):
         self.assertEqual(set(), downstream.affected_projects(graph(root=[]), 'other'))
 
+    def test_charba_publication_reaches_scene_and_ports_after_compatibility_tools(self):
+        projects = downstream.load_catalog(Path(__file__).parents[1] / 'downstream-projects.json')
+        affected = downstream.affected_projects(projects, 'teavm-compat')
+        self.assertTrue({'teavm-charba', 'sarto-scene', 'ports'} <= affected)
+        groups = downstream.build_groups(projects, affected)
+        positions = {name: index for index, group in enumerate(groups) for name in group}
+        self.assertLess(positions['teavm-compat'], positions['teavm-charba'])
+        self.assertLess(positions['teavm-charba'], positions['sarto-scene'])
+        self.assertLess(positions['sarto-scene'], positions['ports'])
+
     def test_catalog_rejects_unknown_dependency_and_untrusted_repository(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / 'catalog.json'

@@ -240,6 +240,7 @@
         "sarto-graphics",
         "sarto-model",
         "sarto-resources",
+        "teavm-charba",
         "webapp-testkit"
       ],
       "checks": [
@@ -276,6 +277,17 @@
       ]
     },
     "sarto-xml": {
+      "dependencies": [
+        "instanto-poms"
+      ]
+    },
+    "teavm-charba": {
+      "dependencies": [
+        "instanto-poms",
+        "teavm-compat"
+      ]
+    },
+    "teavm-compat": {
       "dependencies": [
         "instanto-poms"
       ]

@@ -227,7 +227,10 @@ removes the upstream method and proves that the same consumer fails compilation.
 
 Run analysis once on the full reactor. Partial browser-profile jobs should pass
 `sonar: false` to avoid replacing the project's complete analysis and coverage.
-A failed gate remains a failure; the diagnostic step prints its conditions when the
-token has access. An analysis-only token may not have permission to read results.
+By default the quality gate is advisory: a failed gate is reported as a warning
+annotation, the diagnostic step prints its conditions, and the job still passes, so
+snapshots keep publishing. Pass `sonar-quality-gate: blocking` to make a failed gate
+fail the job. The diagnostic step prints the gate's conditions when the token has
+access. An analysis-only token may not have permission to read results.
 In that case provide optional `SONAR_READ_TOKEN` with Browse permission, or inspect
 the project dashboard. Neither the token nor its value is written to build artifacts.

@@ -79,6 +79,12 @@ on:
         description: Run SonarQube analysis after verification when SONAR_TOKEN is present.
         type: boolean
         default: true
+      sonar-quality-gate:
+        description: >
+          "advisory" reports a failed quality gate as a warning and lets the job
+          pass, so snapshots still publish; "blocking" fails the job.
+        type: string
+        default: advisory
     secrets:
       PACKAGES_TOKEN:
         description: Token with read access to the organisation's private packages and repositories.
@@ -238,7 +244,9 @@ jobs:
             ${{ inputs.maven-args }} ${{ inputs.goals }}
 
       - name: SonarQube Quality Gate
+        id: sonar-gate
         if: inputs.sonar && env.SONAR_TOKEN != '' && !contains(inputs.goals, 'deploy')
+        continue-on-error: ${{ inputs.sonar-quality-gate != 'blocking' }}
         run: |
           set -euo pipefail
           repo_name="${GITHUB_REPOSITORY#*/}"
@@ -249,9 +257,14 @@ jobs:
             -Dsonar.qualitygate.wait=true
 
       - name: Explain failed SonarQube quality gate
-        if: failure() && inputs.sonar && env.SONAR_TOKEN != '' && !contains(inputs.goals, 'deploy')
+        if: always() && steps.sonar-gate.outcome == 'failure'
         continue-on-error: true
+        env:
+          GATE_MODE: ${{ inputs.sonar-quality-gate }}
         run: |
+          if [ "$GATE_MODE" != "blocking" ]; then
+            echo "::warning title=SonarQube quality gate::The quality gate failed. It is advisory for this build, so the job continues; see the conditions below or the project dashboard."
+          fi
           python3 - <<'PYSONAR'
           import json, os, pathlib, urllib.error, urllib.parse, urllib.request
           host = os.environ["SONAR_HOST_URL"].rstrip("/")

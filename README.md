@@ -225,6 +225,12 @@ removes the upstream method and proves that the same consumer fails compilation.
 
 ### SonarQube diagnostics
 
+Test support code is excluded from coverage by default: modules whose directory name
+contains `testkit`, or ends in `-fixture`, `-fixtures`, `-tests` or `-test`. Testkits,
+fixtures and test applications support the tests; they are not shipped product code. A
+project that needs further exclusions should extend the default rather than replace it:
+`<sonar.coverage.exclusions>${instanto.coverage.testSupportExclusions},…</sonar.coverage.exclusions>`.
+
 Run analysis once on the full reactor. Partial browser-profile jobs should pass
 `sonar: false` to avoid replacing the project's complete analysis and coverage.
 By default the quality gate is advisory: a failed gate is reported as a warning

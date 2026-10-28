@@ -126,6 +126,13 @@
     <sonar-maven-plugin.version>5.8.0.7211</sonar-maven-plugin.version>
     <sonar.host.url>https://sonar.instanto.io</sonar.host.url>
     <jacoco.version>0.8.15</jacoco.version>
+    <!--
+      Test support is not shipped product code, so it is kept out of coverage: testkits,
+      fixtures and test applications, recognised by their module directory names. A project
+      that sets its own sonar.coverage.exclusions can keep these by including this property.
+    -->
+    <instanto.coverage.testSupportExclusions>**/*testkit*/**,**/*-fixture/**,**/*-fixtures/**,**/*-tests/**,**/*-test/**</instanto.coverage.testSupportExclusions>
+    <sonar.coverage.exclusions>${instanto.coverage.testSupportExclusions}</sonar.coverage.exclusions>
     <!-- Keep test JVM options separate from the agent, including when coverage is skipped. -->
     <argLine/>
     <instanto.coverage.argLine/>

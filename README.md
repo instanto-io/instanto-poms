@@ -248,3 +248,10 @@ fail the job. The diagnostic step prints the gate's conditions when the token ha
 access. An analysis-only token may not have permission to read results.
 In that case provide optional `SONAR_READ_TOKEN` with Browse permission, or inspect
 the project dashboard. Neither the token nor its value is written to build artifacts.
+
+## Quality
+
+The shared build configuration is verified by the organisation's CI. Repositories that consume it publish SpotBugs findings to code scanning and a compact SpotBugs/SonarQube table on each verification run.
+
+See [Actions](https://github.com/instanto-io/instanto-poms/actions) for the latest verification result.
+

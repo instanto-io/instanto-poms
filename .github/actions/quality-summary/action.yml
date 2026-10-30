@@ -49,13 +49,42 @@ runs:
             print('No SpotBugs SARIF files found')
             raise SystemExit(0)
 
+        # Code scanning accepts one SARIF run per category. SpotBugs emits one
+        # run per module, so combine their results into a single run and remap
+        # each result's rule index onto the merged rule list.
+        driver = None
+        rules = []
+        rule_index = {}
+        results = []
+        for run in runs:
+            candidate = run.get('tool', {}).get('driver', {})
+            if driver is None and candidate:
+                driver = candidate
+            for rule in candidate.get('rules', []):
+                rule_id = rule.get('id')
+                if rule_id and rule_id not in rule_index:
+                    rule_index[rule_id] = len(rules)
+                    rules.append(rule)
+            for result in run.get('results', []):
+                rule_id = result.get('ruleId')
+                if rule_id in rule_index:
+                    result['ruleIndex'] = rule_index[rule_id]
+                else:
+                    result.pop('ruleIndex', None)
+                results.append(result)
+
+        merged_driver = dict(driver or {'name': 'SpotBugs'})
+        merged_driver['rules'] = rules
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(json.dumps({
             'version': '2.1.0',
             '$schema': 'https://json.schemastore.org/sarif-2.1.0.json',
-            'runs': runs,
+            'runs': [{
+                'tool': {'driver': merged_driver},
+                'results': results,
+            }],
         }, indent=2), encoding='utf-8')
-        print(f'Merged {len(runs)} SpotBugs run(s) into {output}')
+        print(f'Merged {len(runs)} SpotBugs run(s) and {len(results)} result(s) into {output}')
         PY
 
     - name: Upload SpotBugs SARIF
@@ -127,10 +156,9 @@ runs:
                     with urllib.request.urlopen(request, timeout=30) as response:
                         return json.load(response)
                 except urllib.error.HTTPError as error:
-                    if error.code in (401, 403):
-                        return None
-                    raise
-                except urllib.error.URLError as error:
+                    print(f'SonarQube returned HTTP {error.code}')
+                    return None
+                except (urllib.error.URLError, OSError) as error:
                     print(f'SonarQube unavailable: {error}')
                     return None
 

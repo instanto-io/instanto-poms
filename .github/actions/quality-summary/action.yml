@@ -1,0 +1,169 @@
+name: Quality summary
+description: >
+  Merge SpotBugs SARIF, publish it to code scanning, and write a readable
+  SpotBugs and SonarQube summary to the workflow run.
+
+inputs:
+  sonar-project-key:
+    description: SonarQube project key. Defaults to the repository name.
+    required: false
+    default: ''
+  sonar-token:
+    description: SonarQube token with analysis or browse permission.
+    required: false
+    default: ''
+  sonar-host-url:
+    description: SonarQube base URL.
+    required: false
+    default: 'https://sonar.instanto.io'
+  upload-sarif:
+    description: Upload the merged SARIF to GitHub code scanning.
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - name: Merge SpotBugs SARIF
+      shell: bash
+      run: |
+        python3 - <<'PY'
+        import json
+        import pathlib
+        import shutil
+
+        output = pathlib.Path('target/spotbugs-reports/spotbugs.sarif')
+        if output.parent.exists():
+            shutil.rmtree(output.parent)
+
+        runs = []
+        for path in pathlib.Path('.').rglob('*.sarif'):
+            if '/target/spotbugs/' not in path.as_posix():
+                continue
+            try:
+                runs.extend(json.loads(path.read_text(encoding='utf-8')).get('runs', []))
+            except (OSError, json.JSONDecodeError) as error:
+                print(f'Skipping {path}: {error}')
+
+        if not runs:
+            print('No SpotBugs SARIF files found')
+            raise SystemExit(0)
+
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps({
+            'version': '2.1.0',
+            '$schema': 'https://json.schemastore.org/sarif-2.1.0.json',
+            'runs': runs,
+        }, indent=2), encoding='utf-8')
+        print(f'Merged {len(runs)} SpotBugs run(s) into {output}')
+        PY
+
+    - name: Upload SpotBugs SARIF
+      if: inputs.upload-sarif == 'true' && hashFiles('target/spotbugs-reports/spotbugs.sarif') != ''
+      continue-on-error: true
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: target/spotbugs-reports/spotbugs.sarif
+        category: spotbugs
+
+    - name: Write quality summary
+      if: always()
+      shell: bash
+      env:
+        SONAR_TOKEN: ${{ inputs.sonar-token }}
+        SONAR_HOST_URL: ${{ inputs.sonar-host-url }}
+        SONAR_PROJECT_KEY: ${{ inputs.sonar-project-key }}
+      run: |
+        python3 - <<'PY'
+        import json
+        import os
+        import pathlib
+        import urllib.error
+        import urllib.parse
+        import urllib.request
+
+        def append(line=''):
+            with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as summary:
+                summary.write(line + '\n')
+
+        append('## Quality')
+        append()
+        append('| Check | Result |')
+        append('| --- | --- |')
+
+        sarif = pathlib.Path('target/spotbugs-reports/spotbugs.sarif')
+        if sarif.exists():
+            runs = json.loads(sarif.read_text(encoding='utf-8')).get('runs', [])
+            counts = {}
+            for run in runs:
+                for result in run.get('results', []):
+                    level = result.get('level', 'warning')
+                    counts[level] = counts.get(level, 0) + 1
+            append(
+                '| SpotBugs | {high} high, {medium} medium, {low} low |'.format(
+                    high=counts.get('error', 0),
+                    medium=counts.get('warning', 0),
+                    low=counts.get('note', 0),
+                )
+            )
+        else:
+            append('| SpotBugs | no analysis produced |')
+
+        project = os.environ.get('SONAR_PROJECT_KEY', '').strip() or os.environ[
+            'GITHUB_REPOSITORY'
+        ].split('/')[-1]
+        host = os.environ.get('SONAR_HOST_URL', 'https://sonar.instanto.io').rstrip('/')
+        token = os.environ.get('SONAR_TOKEN', '').strip()
+
+        if not token:
+            append('| SonarQube | analysis runs on main; summary needs a token |')
+        else:
+            def get(path, **params):
+                request = urllib.request.Request(
+                    host + path + '?' + urllib.parse.urlencode(params),
+                    headers={'Authorization': 'Bearer ' + token},
+                )
+                try:
+                    with urllib.request.urlopen(request, timeout=30) as response:
+                        return json.load(response)
+                except urllib.error.HTTPError as error:
+                    if error.code in (401, 403):
+                        return None
+                    raise
+                except urllib.error.URLError as error:
+                    print(f'SonarQube unavailable: {error}')
+                    return None
+
+            gate = get('/api/qualitygates/project_status', projectKey=project)
+            measures = get(
+                '/api/measures/component',
+                component=project,
+                metricKeys='coverage,bugs,vulnerabilities,code_smells,duplicated_lines_density,ncloc',
+            )
+            if gate or measures:
+                status = (gate or {}).get('projectStatus', {}).get('status', 'unknown')
+                values = {
+                    measure['metric']: measure.get('value')
+                    for measure in (measures or {}).get('component', {}).get('measures', [])
+                }
+                coverage = values.get('coverage')
+                append(
+                    '| SonarQube | gate {}; coverage {} |'.format(
+                        status.lower(),
+                        f'{coverage}%' if coverage is not None else 'not measured',
+                    )
+                )
+                append(
+                    '| SonarQube issues | {} bugs, {} vulnerabilities, {} code smells |'.format(
+                        values.get('bugs', '?'),
+                        values.get('vulnerabilities', '?'),
+                        values.get('code_smells', '?'),
+                    )
+                )
+            else:
+                append('| SonarQube | private dashboard; summary unavailable |')
+
+        append()
+        append('SpotBugs High findings fail the build. The SonarQube quality gate is')
+        append('advisory on `main`, so snapshots still publish when only the gate fails.')
+        PY

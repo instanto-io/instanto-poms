@@ -121,6 +121,8 @@ on:
 permissions:
   contents: read
   packages: write
+  # Required to publish SpotBugs SARIF to code scanning.
+  security-events: write
 
 jobs:
   build:
@@ -324,6 +326,17 @@ jobs:
           path: ${{ inputs.artifact-path }}
           if-no-files-found: error
           retention-days: 7
+
+      # Verification runs publish SpotBugs and the SonarQube gate in a readable
+      # form. Publication-only runs skip it: the caller's verify job owns that
+      # analysis, and two uploads with the same code-scanning category conflict.
+      - name: Publish quality summary
+        if: always() && !contains(inputs.goals, 'deploy')
+        continue-on-error: true
+        uses: instanto-io/instanto-poms/.github/actions/quality-summary@main
+        with:
+          sonar-project-key: ${{ github.event.repository.name }}
+          sonar-token: ${{ secrets.SONAR_READ_TOKEN || secrets.SONAR_TOKEN }}
 
       - name: Remove the job-local Playwright browser cache
         if: always() && inputs.install-playwright

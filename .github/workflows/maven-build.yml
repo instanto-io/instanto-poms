@@ -121,8 +121,6 @@ on:
 permissions:
   contents: read
   packages: write
-  # Required to publish SpotBugs SARIF to code scanning.
-  security-events: write
 
 jobs:
   build:
@@ -337,6 +335,10 @@ jobs:
         with:
           sonar-project-key: ${{ github.event.repository.name }}
           sonar-token: ${{ secrets.SONAR_READ_TOKEN || secrets.SONAR_TOKEN }}
+          # A caller must grant security-events: write before a reusable
+          # workflow may upload SARIF. Keep the shared summary permission-free;
+          # repositories with their own verify job own the code-scanning upload.
+          upload-sarif: 'false'
 
       - name: Remove the job-local Playwright browser cache
         if: always() && inputs.install-playwright

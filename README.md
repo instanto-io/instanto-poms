@@ -126,13 +126,21 @@ artifacts for Windows and arm64, for instance — passes hosted labels instead:
       maven-args: -P javafx-${{ matrix.target }}
 ```
 
-Inputs: `runner-labels`, `java-version`, `parents`, `goals`, `maven-args`,
+Inputs: `runner-labels`, `java-version`, `parents`, `goals`, `maven-args`, `install-playwright`,
 `timeout-minutes`, `name`, `artifact-name`, `artifact-path`. `parents` is empty by default; use it only to test a parent that is not available to the job yet:
 
 ```yaml
       parents: |
         instanto-io/sarto-poms sarto-library-pom/pom.xml
 ```
+
+For tests that use Playwright Java, set `install-playwright: true`. When the tests
+start Playwright, its driver downloads the browser versions it needs into a fresh
+job-local directory. This avoids depending on the versions baked into the runner.
+The workflow removes that directory after the job, including failed builds. The
+runner still needs the browsers' operating-system libraries and network access
+to download the engines. The option defaults to `false` and does not change the
+runner allocation.
 
 To hand a build output to a later workflow, such as a showcase deployed to GitHub
 Pages, name it and give its path. The upload happens only when the build passes:

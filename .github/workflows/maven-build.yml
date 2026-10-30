@@ -53,6 +53,10 @@ on:
         description: Extra Maven arguments, such as -pl or -P.
         type: string
         default: ''
+      install-playwright:
+        description: Let Playwright Java install its matching browser engines in a temporary job-local cache.
+        type: boolean
+        default: false
       timeout-minutes:
         description: Time limit for the job, so a hung browser cannot hold a runner indefinitely.
         type: number
@@ -146,6 +150,17 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+
+      - name: Allocate matching Playwright browser engines
+        if: inputs.install-playwright
+        run: |
+          set -euo pipefail
+          browser_cache=$(mktemp -d "$RUNNER_TEMP/maven-playwright.XXXXXX")
+          echo "MAVEN_PLAYWRIGHT_CACHE=$browser_cache" >> "$GITHUB_ENV"
+          echo "PLAYWRIGHT_BROWSERS_PATH=$browser_cache" >> "$GITHUB_ENV"
+          # Playwright Java downloads the revisions required by its driver when
+          # the tests create Playwright, rather than relying on the runner image.
+          echo "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0" >> "$GITHUB_ENV"
 
       # overwrite-settings is off because self-hosted runners keep their home
       # directory between jobs; credentials go to a job-local file instead.
@@ -309,6 +324,13 @@ jobs:
           path: ${{ inputs.artifact-path }}
           if-no-files-found: error
           retention-days: 7
+
+      - name: Remove the job-local Playwright browser cache
+        if: always() && inputs.install-playwright
+        run: |
+          if [ -n "${MAVEN_PLAYWRIGHT_CACHE:-}" ]; then
+            rm -rf -- "$MAVEN_PLAYWRIGHT_CACHE"
+          fi
 
   downstream:
     needs: build

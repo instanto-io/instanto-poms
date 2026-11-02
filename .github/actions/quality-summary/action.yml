@@ -9,7 +9,9 @@ inputs:
     required: false
     default: ''
   sonar-token:
-    description: SonarQube token with analysis or browse permission.
+    description: >
+      SonarQube user token with Browse permission. Analysis tokens can submit
+      results but cannot read gate conditions or issues.
     required: false
     default: ''
   sonar-host-url:
@@ -147,6 +149,8 @@ runs:
         if not token:
             append('| SonarQube | analysis runs on main; summary needs a token |')
         else:
+            denied = []
+
             def get(path, **params):
                 request = urllib.request.Request(
                     host + path + '?' + urllib.parse.urlencode(params),
@@ -156,7 +160,8 @@ runs:
                     with urllib.request.urlopen(request, timeout=30) as response:
                         return json.load(response)
                 except urllib.error.HTTPError as error:
-                    print(f'SonarQube returned HTTP {error.code}')
+                    denied.append(error.code)
+                    print(f'SonarQube returned HTTP {error.code} for {path}')
                     return None
                 except (urllib.error.URLError, OSError) as error:
                     print(f'SonarQube unavailable: {error}')
@@ -166,21 +171,51 @@ runs:
             measures = get(
                 '/api/measures/component',
                 component=project,
-                metricKeys='coverage,bugs,vulnerabilities,code_smells,duplicated_lines_density,ncloc',
+                metricKeys=','.join([
+                    'coverage', 'new_coverage', 'bugs', 'vulnerabilities', 'code_smells',
+                    'new_bugs', 'new_vulnerabilities', 'new_code_smells',
+                    'duplicated_lines_density', 'new_duplicated_lines_density', 'ncloc',
+                ]),
             )
-            if gate or measures:
+            issues = get(
+                '/api/issues/search',
+                componentKeys=project,
+                inNewCodePeriod='true',
+                resolved='false',
+                ps=100,
+            )
+            if 401 in denied or 403 in denied:
+                append('| SonarQube | needs `SONAR_READ_TOKEN` with **Browse** permission |')
+                print('::warning::SonarQube summary needs SONAR_READ_TOKEN with Browse permission')
+            elif gate is not None or measures is not None:
                 status = (gate or {}).get('projectStatus', {}).get('status', 'unknown')
                 values = {
                     measure['metric']: measure.get('value')
                     for measure in (measures or {}).get('component', {}).get('measures', [])
                 }
                 coverage = values.get('coverage')
+                new_coverage = values.get('new_coverage')
                 append(
-                    '| SonarQube | gate {}; coverage {} |'.format(
+                    '| SonarQube | gate {}; coverage {}; new-code coverage {} |'.format(
                         status.lower(),
                         f'{coverage}%' if coverage is not None else 'not measured',
+                        f'{new_coverage}%' if new_coverage is not None else 'not measured',
                     )
                 )
+                failed = [
+                    condition
+                    for condition in (gate or {}).get('projectStatus', {}).get('conditions', [])
+                    if condition.get('status') == 'ERROR'
+                ]
+                for condition in failed:
+                    append(
+                        '| SonarQube gate | {} is {} (needs {} {}) |'.format(
+                            condition.get('metricKey', 'condition'),
+                            condition.get('actualValue', '?'),
+                            condition.get('comparator', '?'),
+                            condition.get('errorThreshold', '?'),
+                        )
+                    )
                 append(
                     '| SonarQube issues | {} bugs, {} vulnerabilities, {} code smells |'.format(
                         values.get('bugs', '?'),
@@ -188,8 +223,23 @@ runs:
                         values.get('code_smells', '?'),
                     )
                 )
+                grouped = {}
+                for issue in (issues or {}).get('issues', []):
+                    grouped.setdefault(issue.get('rule', 'unknown'), []).append(issue)
+                for rule, group in sorted(
+                    grouped.items(), key=lambda item: (-len(item[1]), item[0])
+                )[:5]:
+                    first = group[0]
+                    append(
+                        '| SonarQube {} | {} × `{}`: {} |'.format(
+                            str(first.get('severity', 'issue')).lower(),
+                            len(group),
+                            rule,
+                            first.get('message', ''),
+                        )
+                    )
             else:
-                append('| SonarQube | private dashboard; summary unavailable |')
+                append('| SonarQube | gate and measurements unavailable |')
 
         append()
         append('SpotBugs High findings fail the build. The SonarQube quality gate is')

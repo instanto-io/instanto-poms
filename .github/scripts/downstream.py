@@ -110,6 +110,17 @@ def checkout(repo, destination):
     return sha
 
 
+def isolate_upstream(source, destination):
+    """Copy the exact committed source outside the enclosing Actions checkout."""
+    revision = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=source, text=True).strip()
+    subprocess.run(["git", "clone", "--quiet", "--no-local", "--no-checkout",
+                    str(source.resolve()), str(destination)], check=True)
+    subprocess.run(["git", "checkout", "--quiet", "--detach", revision],
+                   cwd=destination, check=True)
+    return revision
+
+
 def write_settings(path, sources):
     """Use environment references, so credentials never enter reports or XML literals."""
     ids = {"github"}
@@ -242,9 +253,8 @@ def main():
     output.mkdir()
     repository = workspace / "m2"
     repository.mkdir()
-    sources = {args.upstream: args.source.resolve()}
-    revisions = {args.upstream: subprocess.check_output(
-        ["git", "rev-parse", "HEAD"], cwd=args.source, text=True).strip()}
+    sources = {args.upstream: workspace / args.upstream}
+    revisions = {args.upstream: isolate_upstream(args.source, sources[args.upstream])}
     checkout_failed = set()
     for name in sorted(affected - {args.upstream}):
         sources[name] = workspace / name

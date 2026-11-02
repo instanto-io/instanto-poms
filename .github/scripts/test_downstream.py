@@ -1,5 +1,6 @@
 """Exercise scheduling and failure propagation without a GitHub account or Maven cache."""
 import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,6 +14,30 @@ def graph(**dependencies):
 
 
 class DownstreamTests(unittest.TestCase):
+    def test_upstream_copy_preserves_commit_and_leaves_enclosing_checkout_untouched(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / 'outer' / 'upstream'
+            source.mkdir(parents=True)
+            (source.parent / 'pom.xml').write_text('<project/>')
+            def git(*args):
+                return subprocess.check_output(['git', *args], cwd=source, text=True).strip()
+            git('init', '-q')
+            (source / 'pom.xml').write_text('committed pom')
+            git('add', 'pom.xml')
+            git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
+                'commit', '-qm', 'Pinned source')
+            revision = git('rev-parse', 'HEAD')
+            (source / 'pom.xml').write_text('uncommitted work')
+            destination = root / 'isolated' / 'upstream'
+            destination.parent.mkdir()
+            self.assertEqual(revision, downstream.isolate_upstream(source, destination))
+            self.assertEqual('committed pom', (destination / 'pom.xml').read_text())
+            self.assertEqual('uncommitted work', (source / 'pom.xml').read_text())
+            self.assertEqual(revision, subprocess.check_output(
+                ['git', 'rev-parse', 'HEAD'], cwd=destination, text=True).strip())
+            self.assertFalse((destination.parent / 'pom.xml').exists())
+
     def test_nested_checkout_pins_workspace_root_without_skipping_tests(self):
         with tempfile.TemporaryDirectory() as tmp:
             outer = Path(tmp)

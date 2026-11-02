@@ -192,6 +192,9 @@ downloads the uploaded archive and verifies its checksum before reporting succes
 Forgejo package retention is managed on the registry; GitHub artifact retention does
 not apply. Existing GitHub artifacts are not deleted by this workflow.
 
+The upstream commit is cloned locally into the same temporary workspace as its consumers,
+outside the enclosing Actions checkout. This prevents Quarkus parent-POM discovery from
+loading leftover modules from a previous runner job; uncommitted source files are not copied.
 Each Maven invocation pins its top-level workspace to the repository being checked, so nested
 Actions checkouts cannot make Quarkus load modules from an enclosing checkout.
 

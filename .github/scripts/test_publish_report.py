@@ -68,7 +68,7 @@ class PublishReportTest(unittest.TestCase):
                                     "--path", str(reports)]):
                 publish_report.main()
             self.assertEqual([c[0] for c in calls], ["PUT", "GET"])
-            self.assertIn("/ci-instanto-io-sarto-scene-downstream-compatibility/123-2/", calls[0][1])
+            self.assertIn("/ci-instanto-io-sarto-scene-downstream-compatibility/123-2-", calls[0][1])
             expected = "Basic " + base64.b64encode(b"fixture:dummy-token").decode()
             self.assertTrue(all(c[2] == expected for c in calls))
             with tarfile.open(fileobj=io.BytesIO(next(iter(payloads.values())))) as archive:
@@ -76,6 +76,30 @@ class PublishReportTest(unittest.TestCase):
             self.assertIn("Download reports", summary.read_text())
             self.assertIn("SHA-256", summary.read_text())
             self.assertNotIn("dummy-token", summary.read_text())
+
+    def test_reports_from_the_same_workflow_run_are_preserved_separately(self):
+        with tempfile.TemporaryDirectory() as directory, registry() as (url, calls, payloads):
+            report = Path(directory).resolve() / "results.json"
+            summary = Path(directory) / "summary.md"
+            env = {"FORGEJO_PACKAGE_USER": "fixture", "FORGEJO_PACKAGE_TOKEN": "dummy-token",
+                   "GITHUB_REPOSITORY": "instanto-io/sarto", "GITHUB_RUN_ID": "123",
+                   "GITHUB_RUN_ATTEMPT": "1", "GITHUB_JOB": "compatibility",
+                   "GITHUB_STEP_SUMMARY": str(summary)}
+            with patch.dict(os.environ, env), patch.object(publish_report, "REGISTRY", url), \
+                 patch("sys.argv", ["publish_report.py", "--name", "downstream-compatibility",
+                                    "--path", str(report)]):
+                for outcome in ("foundation", "framework"):
+                    report.write_text(outcome)
+                    publish_report.main()
+            self.assertEqual([c[0] for c in calls], ["PUT", "GET", "PUT", "GET"])
+            self.assertNotEqual(calls[0][1], calls[2][1])
+            self.assertEqual(len(payloads), 2)
+            contents = []
+            for path, payload in payloads.items():
+                self.assertIn(path, summary.read_text())
+                with tarfile.open(fileobj=io.BytesIO(payload)) as archive:
+                    contents.append(archive.extractfile("results.json").read().decode())
+            self.assertEqual(contents, ["foundation", "framework"])
 
     def test_publication_errors_fail_and_do_not_follow_redirects(self):
         for status in (403, 409, 500, 302):

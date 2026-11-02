@@ -186,7 +186,8 @@ longer consume GitHub Actions artifact storage; the optional `artifact-name` out
 for workflows that exchange build outputs through GitHub remains unchanged.
 
 Packages use `ci-<repository-owner>-<repository-name>-<report-name>` and version
-`<run-id>-<run-attempt>`, so reruns do not overwrite previous evidence. The publisher
+`<run-id>-<run-attempt>-<publication-id>`. Each upload gets a unique publication ID,
+so separate jobs in one run and later reruns preserve their own evidence. The publisher
 downloads the uploaded archive and verifies its checksum before reporting success.
 Forgejo package retention is managed on the registry; GitHub artifact retention does
 not apply. Existing GitHub artifacts are not deleted by this workflow.

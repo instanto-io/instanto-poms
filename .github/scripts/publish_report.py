@@ -12,6 +12,7 @@ import tarfile
 import tempfile
 import urllib.error
 import urllib.request
+import uuid
 
 
 REGISTRY = "https://packages.instanto.io/api/packages/instanto-io/generic"
@@ -87,7 +88,10 @@ def main():
     repository = component(os.environ["GITHUB_REPOSITORY"].replace("/", "-"))
     name = component(args.name)
     package = f"ci-{repository}-{name}"
-    version = component(os.environ["GITHUB_RUN_ID"] + "-" + os.environ["GITHUB_RUN_ATTEMPT"])
+    # Reusable workflows can publish the same report several times in one run.
+    # GITHUB_JOB is also shared across those calls, so each upload needs its own ID.
+    version = component(os.environ["GITHUB_RUN_ID"] + "-" + os.environ["GITHUB_RUN_ATTEMPT"]
+                        + "-" + uuid.uuid4().hex)
     url = f"{REGISTRY}/{package}/{version}/{name}.tar.gz"
     with tempfile.TemporaryDirectory(prefix="ci-report-") as directory:
         archive = Path(directory) / f"{name}.tar.gz"

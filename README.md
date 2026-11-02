@@ -192,6 +192,9 @@ downloads the uploaded archive and verifies its checksum before reporting succes
 Forgejo package retention is managed on the registry; GitHub artifact retention does
 not apply. Existing GitHub artifacts are not deleted by this workflow.
 
+Each Maven invocation pins its top-level workspace to the repository being checked, so nested
+Actions checkouts cannot make Quarkus load modules from an enclosing checkout.
+
 The cascade installs the exact upstream checkout into a fresh job-local Maven repository, then
 builds consumers with remote snapshot updates disabled. Consumers run `clean install`,
 including tests; catalog `checks` add the browser profiles for scene, graphics and model.

@@ -144,8 +144,10 @@ def run_maven(source, arguments, repository, settings, log):
     wrapper = source / "mvnw"
     executable = str(wrapper) if wrapper.is_file() and os.access(wrapper, os.X_OK) else "mvn"
     command = [executable, "--batch-mode", "--no-transfer-progress", "--errors", "--fail-at-end",
-               "--settings", str(settings), "-Dmaven.repo.local=" + str(repository), *arguments]
-    # Maven executes in each repository, preserving its multiModuleProjectDirectory contract.
+               "--settings", str(settings), "-Dmaven.repo.local=" + str(repository),
+               "-Dmaven.top-level-basedir=" + str(source.resolve()), *arguments]
+    # Pin the workspace root as well as cwd: Quarkus can otherwise discover an enclosing
+    # checkout when Actions places the upstream source inside its existing workspace.
     with log.open("w") as output:
         process = subprocess.Popen(command, cwd=source, stdout=subprocess.PIPE,
                                    stderr=subprocess.STDOUT, text=True)

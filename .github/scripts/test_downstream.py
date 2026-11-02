@@ -3,7 +3,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 import downstream
 
@@ -13,6 +13,24 @@ def graph(**dependencies):
 
 
 class DownstreamTests(unittest.TestCase):
+    def test_nested_checkout_pins_workspace_root_without_skipping_tests(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            outer = Path(tmp)
+            source = outer / 'upstream checkout'
+            source.mkdir()
+            (outer / 'pom.xml').write_text('<project/>')
+            process = MagicMock()
+            process.stdout = iter(['verification completed\n'])
+            process.wait.return_value = 0
+            with patch.object(downstream.subprocess, 'Popen', return_value=process) as launch:
+                self.assertTrue(downstream.run_maven(
+                    source, ['clean', 'install'], outer / 'm2', outer / 'settings.xml', outer / 'run.log'))
+            args, kwargs = launch.call_args
+            self.assertIn('-Dmaven.top-level-basedir=' + str(source.resolve()), args[0])
+            self.assertEqual(source, kwargs['cwd'])
+            self.assertEqual(['clean', 'install'], args[0][-2:])
+            self.assertNotIn('-DskipTests', args[0])
+
     def test_transitive_diamond_runs_once_and_before_consumers(self):
         projects = graph(root=[], left=['root'], right=['root'], leaf=['left', 'right'], unrelated=[])
         affected = downstream.affected_projects(projects, 'root')

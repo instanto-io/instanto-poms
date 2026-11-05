@@ -284,6 +284,9 @@
             <!-- Max effort on a module of a few hundred generated classes exhausts
                  the analyser's default heap. -->
             <maxHeap>2048</maxHeap>
+            <!-- The analyser runs in a forked JVM; keep it from starting AWT, which on macOS
+                 opens an application window and takes focus from the developer's desktop. -->
+            <jvmArgs>-Djava.awt.headless=true -Dapple.awt.UIElement=true</jvmArgs>
             <xmlOutput>true</xmlOutput>
             <spotbugsXmlOutputDirectory>${project.build.directory}/spotbugs</spotbugsXmlOutputDirectory>
             <spotbugsXmlOutputFilename>${project.artifactId}-spotbugs.xml</spotbugsXmlOutputFilename>

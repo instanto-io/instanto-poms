@@ -20,9 +20,20 @@ A project that cannot change parent can import `instanto-teavm-pom` into
 `dependencyManagement`. An import carries managed dependency versions only;
 it does not carry the TeaVM property or plugin configuration.
 
-Each child project supplies its own name and SCM address. See the
-[parent POM](pom.xml) and [TeaVM parent](instanto-teavm-pom/pom.xml)
-for the current settings.
+Each project supplies its own name. Its root POM also names its repository
+in the instanto-io organisation:
+
+```xml
+<properties>
+  <instanto.repository>sarto-relay</instanto.repository>
+</properties>
+```
+
+Every module then links to `https://github.com/instanto-io/sarto-relay`, in
+its project URL and its SCM addresses. Modules inherit the links unchanged:
+Maven does not add their paths to them. A project without the property links
+to this repository. See the [parent POM](pom.xml) and
+[TeaVM parent](instanto-teavm-pom/pom.xml) for the current settings.
 
 ## JavaScript assets
 

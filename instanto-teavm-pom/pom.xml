@@ -64,6 +64,8 @@
     <instanto.terser.skip>true</instanto.terser.skip>
     <instanto.terser.directory>${project.build.directory}/javascript</instanto.terser.directory>
     <instanto.terser.file>classes.js</instanto.terser.file>
+    <!-- TeaCoCo measures what TeaVM browser tests execute, published from instanto-io/tea-coco. -->
+    <teacoco.version>0.1.0-SNAPSHOT</teacoco.version>
   </properties>
 
   <dependencyManagement>
@@ -215,6 +217,25 @@
                   <argument>${instanto.terser.file}</argument>
                 </arguments>
               </configuration>
+            </execution>
+          </executions>
+        </plugin>
+        <!-- Coverage for TeaVMTestRunner suites, which JaCoCo cannot see because the code
+             runs as JavaScript in Chrome. A module opts in by declaring this plugin; a test
+             module measuring another module adds dependencyIncludes and sourceRoots. The
+             report is target/teavm-coverage.xml, in JaCoCo's XML format, for Sonar's
+             sonar.coverage.jacoco.xmlReportPaths. -Dteacoco.skip=true turns it off. -->
+        <plugin>
+          <groupId>io.instanto</groupId>
+          <artifactId>teacoco-maven-plugin</artifactId>
+          <version>${teacoco.version}</version>
+          <executions>
+            <execution>
+              <id>teavm-coverage</id>
+              <goals>
+                <goal>prepare</goal>
+                <goal>report</goal>
+              </goals>
             </execution>
           </executions>
         </plugin>

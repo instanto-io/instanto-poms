@@ -156,6 +156,7 @@ jobs:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       SONAR_READ_TOKEN: ${{ secrets.SONAR_READ_TOKEN }}
       SONAR_HOST_URL: https://sonar.instanto.io
+      MAVEN_CENTRAL_MIRROR_URL: ${{ vars.MAVEN_CENTRAL_MIRROR_URL }}
     steps:
       # Self-hosted machines are provisioned by hand and differ; record what
       # this one offers so a failure caused by the machine is visible as such.
@@ -190,6 +191,12 @@ jobs:
           java-version: ${{ inputs.java-version }}
           overwrite-settings: false
 
+      - name: Restore runner-local Maven downloads
+        uses: instanto-io/instanto-poms/.github/actions/maven-cache@main
+        with:
+          mode: prepare
+          maven-args: ${{ inputs.maven-args }}
+
       - name: Make Maven available
         env:
           MAVEN_VERSION: ${{ inputs.maven-version }}
@@ -203,8 +210,19 @@ jobs:
             home="${RUNNER_TOOL_CACHE:-$RUNNER_TEMP}/maven/${MAVEN_VERSION}"
             if [ ! -x "$home/bin/mvn" ]; then
               mkdir -p "$home"
-              curl -fsSL "https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/${MAVEN_VERSION}/apache-maven-${MAVEN_VERSION}-bin.tar.gz" \
-                | tar -xz --strip-components=1 -C "$home"
+              archive="$RUNNER_TEMP/apache-maven.tar.gz"
+              base="${MAVEN_CENTRAL_MIRROR_URL:-https://repo.maven.apache.org/maven2}"
+              url="$base/org/apache/maven/apache-maven/${MAVEN_VERSION}/apache-maven-${MAVEN_VERSION}-bin.tar.gz"
+              curl --retry 4 --retry-delay 3 --retry-max-time 90 -fsSL "$url" -o "$archive"
+              curl --retry 4 --retry-delay 3 --retry-max-time 90 -fsSL "$url.sha512" -o "$archive.sha512"
+              python3 - "$archive" <<'PY'
+          import hashlib, pathlib, sys
+          archive = pathlib.Path(sys.argv[1])
+          expected = archive.with_suffix(archive.suffix + ".sha512").read_text().split()[0]
+          if hashlib.sha512(archive.read_bytes()).hexdigest() != expected:
+              raise SystemExit("Maven distribution checksum mismatch")
+          PY
+              tar -xz --strip-components=1 -C "$home" -f "$archive"
             fi
             echo "$home/bin" >> "$GITHUB_PATH"
             echo "MVN=$home/bin/mvn" >> "$GITHUB_ENV"
@@ -236,6 +254,9 @@ jobs:
               echo "artifacts: credentials written" >&2
             fi
             echo '</servers>'
+            if [ -n "${MAVEN_CENTRAL_MIRROR_URL:-}" ]; then
+              echo '<mirrors><mirror><id>instanto-central</id><mirrorOf>central</mirrorOf><url>${env.MAVEN_CENTRAL_MIRROR_URL}</url></mirror></mirrors>'
+            fi
             # The bootstrap repository: Maven looks for a parent before it reads the
             # parent's own repositories, so packages.instanto.io has to be known here.
             echo '<profiles><profile><id>instanto-snapshots</id>'
@@ -402,6 +423,13 @@ jobs:
           # Code scanning SARIF upload is disabled; SpotBugs and CVE results
           # render in the workflow summary and nightly security dashboard.
           upload-sarif: 'false'
+
+      - name: Save runner-local Maven downloads
+        if: always()
+        uses: instanto-io/instanto-poms/.github/actions/maven-cache@main
+        with:
+          mode: save
+          maven-args: ${{ inputs.maven-args }}
 
       - name: Remove the job-local Playwright browser cache
         if: always() && inputs.install-playwright

@@ -1,0 +1,17 @@
+name: Runner Maven download cache
+description: Reuse Central release downloads and wrapper distributions without reusing installed build artifacts.
+inputs:
+  mode:
+    description: prepare before Maven or save after Maven
+    required: true
+  maven-args:
+    description: Maven arguments, including an optional explicit local repository.
+    default: ''
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        CACHE_MODE: ${{ inputs.mode }}
+        CACHE_MAVEN_ARGS: ${{ inputs.maven-args }}
+      run: python3 "$GITHUB_ACTION_PATH/cache.py" "$CACHE_MODE" --maven-args="$CACHE_MAVEN_ARGS"

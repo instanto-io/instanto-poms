@@ -163,6 +163,30 @@ Pages, name it and give its path. The upload happens only when the build passes:
       artifact-path: showcase/target/site
 ```
 
+### Runner-local Maven downloads
+
+The shared build keeps downloaded Central releases in
+`~/.local/share/instanto-maven-cache/v1` and seeds each job's separate Maven
+repository from that cache. Maven wrapper distributions also stay there, so
+wrapper-based builds do not download Maven on every job. The runner's cleanup
+hook can still clear `~/.m2` between jobs.
+
+Only files Maven records as downloads from Central or its selected mirror enter
+the release cache. Locally installed versions, snapshots, `io.instanto`
+artifacts, failed-download markers, settings and credentials are excluded.
+Snapshot updates and private-registry authentication remain unchanged. The cache
+is saved after failed builds too, retaining successful public downloads.
+
+When Central is rate-limited or unavailable, the job uses Google's public Central
+mirror for the wrapper and for repository ID `central` only. Private repositories
+are not mirrored. Set the repository/organisation variable
+`MAVEN_CENTRAL_MIRROR_URL` to an HTTPS Central proxy URL to use another mirror.
+The runner cache is separate from that HTTP mirror. It persists for the life of
+the runner container, including normal restarts. To retain it through container
+recreation, mount a dedicated named volume at the cache path and give the runner
+account write access. Each runner should have its own volume. It can be deleted
+when the runner is idle to reclaim disk space.
+
 ### Downstream compatibility
 
 After a successful default-branch `deploy`, the shared workflow builds the registered

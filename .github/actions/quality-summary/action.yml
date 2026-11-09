@@ -21,7 +21,7 @@ inputs:
   upload-sarif:
     description: Upload the merged SARIF to GitHub code scanning.
     required: false
-    default: 'true'
+    default: 'false'
 
 runs:
   using: composite
@@ -139,6 +139,27 @@ runs:
             )
         else:
             append('| SpotBugs | no analysis produced |')
+
+        security = pathlib.Path('target/security/security-summary.json')
+        if security.exists():
+            sec = json.loads(security.read_text(encoding='utf-8'))
+            sbom = sec.get('sbom', {})
+            cve = sec.get('cve', {})
+            counts = cve.get('counts', {})
+            append(
+                '| CycloneDX SBOM | {components} components ({boms} BOMs) |'.format(
+                    components=sbom.get('components', 0),
+                    boms=sbom.get('bom_files', 0),
+                )
+            )
+            append(
+                '| Dependency CVEs | {c} critical, {h} high, {m} medium, {l} low |'.format(
+                    c=counts.get('CRITICAL', 0),
+                    h=counts.get('HIGH', 0),
+                    m=counts.get('MEDIUM', 0),
+                    l=counts.get('LOW', 0),
+                )
+            )
 
         project = os.environ.get('SONAR_PROJECT_KEY', '').strip() or os.environ[
             'GITHUB_REPOSITORY'

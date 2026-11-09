@@ -12,14 +12,18 @@ permissions:
 
 jobs:
   verify:
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/maven-build.yml
     with:
       name: Verify Maven parents
       parents: ''
       goals: clean verify
+      sonar: false
+      downstream-checks: false
     secrets: inherit
 
   downstream-planner:
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     name: Verify downstream scheduling and Maven artifact propagation
     runs-on: ubuntu-latest
     steps:
@@ -35,6 +39,7 @@ jobs:
         run: python3 .github/scripts/verify_downstream_maven.py
 
   coverage-inheritance:
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     name: Verify inherited test coverage
     # Report publication needs the private packages.instanto.io network.
     runs-on: [self-hosted, instanto-container]
@@ -56,6 +61,7 @@ jobs:
           --path 'target/coverage-inheritance/*.log'
 
   terser-inheritance:
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     name: Verify TeaVM and Terser asset packaging
     runs-on: [self-hosted, instanto-container]
     steps:
@@ -80,12 +86,13 @@ jobs:
           --path target/terser-inheritance/results.json
 
   publish-snapshot:
-    if: github.repository == 'instanto-io/instanto-poms' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: [verify, coverage-inheritance, terser-inheritance, downstream-planner]
+    if: github.repository == 'instanto-io/instanto-poms' && github.event_name == 'push' && github.ref == 'refs/heads/main'
     uses: ./.github/workflows/maven-build.yml
     with:
       name: Publish Maven parent snapshots
       parents: ''
       goals: deploy
-      maven-args: -DskipTests
+      fast-deploy: true
+      downstream-checks: false
+      sonar: false
     secrets: inherit

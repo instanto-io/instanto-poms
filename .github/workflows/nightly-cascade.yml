@@ -1,0 +1,541 @@
+name: Nightly compatibility, verification, and security cascade
+
+# Reusable nightly orchestrator invoked ONLY from private instanto-io/sarto so
+# private repository metadata, test logs, Sonar metrics, and CVE reports stay
+# isolated inside the private organisation run and nightly-state branch.
+
+on:
+  workflow_call:
+    inputs:
+      upstream:
+        description: Optional comma-separated upstream project names to force into compatibility & security verification.
+        type: string
+        default: ''
+      force:
+        description: Force all registered projects to run regardless of unchanged SHAs.
+        type: boolean
+        default: false
+      bootstrap_only:
+        description: Record current default-branch HEAD SHAs into the baseline branch without building.
+        type: boolean
+        default: false
+      state-branch:
+        description: Orphan branch in the calling repository holding baseline.json.
+        type: string
+        default: nightly-state
+      dry-run:
+        description: Plan, build, and report without updating the baseline state branch.
+        type: boolean
+        default: false
+    secrets:
+      PACKAGES_TOKEN:
+        required: false
+      FORGEJO_PACKAGE_USER:
+        required: false
+      FORGEJO_PACKAGE_TOKEN:
+        required: false
+      FORGEJO_PACKAGES_TOKEN:
+        required: false
+      FORGEJO_PACKAGE_READ_TOKEN:
+        required: false
+      ARTIFACTS_USERNAME:
+        required: false
+      ARTIFACTS_TOKEN:
+        required: false
+      SONAR_TOKEN:
+        required: false
+      SONAR_READ_TOKEN:
+        required: false
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  plan:
+    name: Stage 1 - Plan changed upstreams and consumers
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      should_run: ${{ steps.plan.outputs.should_run }}
+      mode: ${{ steps.plan.outputs.mode }}
+      matrix_include: ${{ steps.plan.outputs.matrix_include }}
+    env:
+      MAVEN_TOKEN: ${{ secrets.PACKAGES_TOKEN || github.token }}
+    steps:
+      - name: Check out shared CI tooling
+        uses: actions/checkout@v7
+        with:
+          repository: instanto-io/instanto-poms
+          ref: main
+          path: tooling
+          persist-credentials: false
+
+      - name: Check out nightly baseline state
+        id: state-checkout
+        continue-on-error: true
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.state-branch }}
+          path: state
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Compute incremental nightly build plan
+        id: plan
+        env:
+          REQ_UPSTREAM: ${{ inputs.upstream }}
+          REQ_FORCE: ${{ inputs.force }}
+          REQ_BOOTSTRAP: ${{ inputs.bootstrap_only }}
+        run: |
+          set -euo pipefail
+          mkdir -p state plan-out
+          if [ ! -f state/baseline.json ]; then
+            echo '{"schema_version": 1, "updated_at": null, "projects": {}}' > state/baseline.json
+          fi
+          args=(
+            python3 tooling/.github/scripts/nightly.py plan
+            --catalog tooling/.github/downstream-projects.json
+            --baseline state/baseline.json
+            --output-dir plan-out
+          )
+          if [ -n "$REQ_UPSTREAM" ]; then args+=(--upstream "$REQ_UPSTREAM"); fi
+          if [ "$REQ_FORCE" = "true" ]; then args+=(--force); fi
+          if [ "$REQ_BOOTSTRAP" = "true" ]; then args+=(--bootstrap-only); fi
+          "${args[@]}"
+
+      - name: Upload plan artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: plan-artifacts
+          path: plan-out
+          retention-days: 7
+
+  compat:
+    name: Stage 2 - Compatibility cascade & blame isolation
+    needs: plan
+    if: needs.plan.outputs.should_run == 'true'
+    runs-on: ["self-hosted", "instanto-container"]
+    timeout-minutes: 300
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '0'
+      MAVEN_TOKEN: ${{ secrets.PACKAGES_TOKEN || github.token }}
+      MAVEN_ACTOR: ${{ github.actor }}
+      FORGEJO_PACKAGE_USER: ${{ secrets.FORGEJO_PACKAGE_USER }}
+      FORGEJO_PACKAGE_TOKEN: ${{ secrets.FORGEJO_PACKAGE_TOKEN || secrets.FORGEJO_PACKAGES_TOKEN || secrets.FORGEJO_PACKAGE_READ_TOKEN }}
+      ARTIFACTS_USERNAME: ${{ secrets.ARTIFACTS_USERNAME }}
+      ARTIFACTS_TOKEN: ${{ secrets.ARTIFACTS_TOKEN }}
+    steps:
+      - name: Allocate isolated compatibility workspace
+        run: |
+          directory=$(mktemp -d "$RUNNER_TEMP/nightly-compat-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-XXXXXX")
+          echo "NIGHTLY_WORKSPACE=$directory/build" >> "$GITHUB_ENV"
+          echo "PLAYWRIGHT_BROWSERS_PATH=$directory/build/browser-cache" >> "$GITHUB_ENV"
+          echo "OVERLAY_ARCHIVE=$RUNNER_TEMP/m2-overlay-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.tar.gz" >> "$GITHUB_ENV"
+
+      - name: Check out shared CI tooling
+        uses: actions/checkout@v7
+        with:
+          repository: instanto-io/instanto-poms
+          ref: main
+          path: tooling
+          persist-credentials: false
+
+      - name: Check out nightly baseline state
+        continue-on-error: true
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.state-branch }}
+          path: state
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Download plan artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: plan-artifacts
+          path: plan-out
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          overwrite-settings: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Ensure Maven is installed
+        run: |
+          set -euo pipefail
+          if ! command -v mvn >/dev/null 2>&1; then
+            maven_ver="3.9.16"
+            maven_dir="$RUNNER_TEMP/nightly-maven-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+            mkdir -p "$maven_dir"
+            curl -fsSL "https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/${maven_ver}/apache-maven-${maven_ver}-bin.tar.gz" \
+              | tar -xz --strip-components=1 -C "$maven_dir"
+            echo "$maven_dir/bin" >> "$GITHUB_PATH"
+          fi
+
+      - name: Build changed libraries and downstream consumers in isolated m2
+        run: |
+          set -euo pipefail
+          mkdir -p state
+          if [ ! -f state/baseline.json ]; then
+            echo '{"schema_version": 1, "updated_at": null, "projects": {}}' > state/baseline.json
+          fi
+          python3 tooling/.github/scripts/nightly.py compat \
+            --catalog tooling/.github/downstream-projects.json \
+            --plan plan-out/plan.json \
+            --baseline state/baseline.json \
+            --workspace "$NIGHTLY_WORKSPACE" \
+            --overlay-out "$OVERLAY_ARCHIVE"
+
+      - name: Upload verified local snapshot m2 overlay
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m2-overlay
+          path: ${{ env.OVERLAY_ARCHIVE }}
+          if-no-files-found: ignore
+          retention-days: 1
+
+      - name: Upload compatibility & blame reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compat-reports
+          path: ${{ env.NIGHTLY_WORKSPACE }}/reports
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Clean compatibility workspace and overlay archive
+        if: always()
+        run: |
+          if [ -n "${NIGHTLY_WORKSPACE:-}" ]; then rm -rf -- "$(dirname "$NIGHTLY_WORKSPACE")"; fi
+          if [ -n "${OVERLAY_ARCHIVE:-}" ]; then rm -f -- "$OVERLAY_ARCHIVE"; fi
+
+  verify-and-security:
+    name: "Stage 3 - Verify & Security (${{ matrix.name }})"
+    needs: [plan, compat]
+    if: needs.plan.outputs.should_run == 'true' && needs.compat.result == 'success'
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.matrix_include) }}
+    runs-on: ${{ matrix.runner_labels }}
+    timeout-minutes: 120
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: ${{ matrix.install_playwright && '0' || '1' }}
+      MAVEN_TOKEN: ${{ secrets.PACKAGES_TOKEN || github.token }}
+      MAVEN_ACTOR: ${{ github.actor }}
+      FORGEJO_PACKAGE_USER: ${{ secrets.FORGEJO_PACKAGE_USER }}
+      FORGEJO_PACKAGE_TOKEN: ${{ secrets.FORGEJO_PACKAGE_TOKEN || secrets.FORGEJO_PACKAGES_TOKEN || secrets.FORGEJO_PACKAGE_READ_TOKEN }}
+      ARTIFACTS_USERNAME: ${{ secrets.ARTIFACTS_USERNAME }}
+      ARTIFACTS_TOKEN: ${{ secrets.ARTIFACTS_TOKEN }}
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_READ_TOKEN: ${{ secrets.SONAR_READ_TOKEN }}
+      SONAR_HOST_URL: https://sonar.instanto.io
+      SONAR_PROJECT_KEY: ${{ matrix.name }}
+    steps:
+      - name: Allocate isolated verification workspace
+        run: |
+          directory=$(mktemp -d "$RUNNER_TEMP/nightly-verify-${{ matrix.name }}-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-XXXXXX")
+          mkdir -p "$directory/m2" "$directory/logs" "stage3-out"
+          echo "VERIFY_WORKSPACE=$directory" >> "$GITHUB_ENV"
+          echo "VERIFY_M2=$directory/m2" >> "$GITHUB_ENV"
+          echo "VERIFY_SETTINGS=$directory/settings.xml" >> "$GITHUB_ENV"
+          echo "VERIFY_LOGS=$directory/logs" >> "$GITHUB_ENV"
+          echo "PLAYWRIGHT_BROWSERS_PATH=$directory/browsers" >> "$GITHUB_ENV"
+
+      - name: Check out shared CI tooling
+        uses: actions/checkout@v7
+        with:
+          repository: instanto-io/instanto-poms
+          ref: main
+          path: tooling
+          persist-credentials: false
+
+      - name: Check out target repository at pinned SHA
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ matrix.repository }}
+          ref: ${{ matrix.sha }}
+          path: target-repo
+          fetch-depth: 0
+          token: ${{ secrets.PACKAGES_TOKEN || github.token }}
+          persist-credentials: false
+
+      - name: Download verified m2 snapshot overlay
+        uses: actions/download-artifact@v4
+        with:
+          name: m2-overlay
+          path: overlay
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          overwrite-settings: false
+
+      - uses: actions/setup-node@v4
+        if: matrix.node_version != ''
+        with:
+          node-version: ${{ matrix.node_version }}
+
+      - name: Ensure Maven is installed and locate executable
+        run: |
+          set -euo pipefail
+          if [ -x target-repo/mvnw ]; then
+            echo "VERIFY_MVN=$PWD/target-repo/mvnw" >> "$GITHUB_ENV"
+          elif command -v mvn >/dev/null 2>&1; then
+            echo "VERIFY_MVN=$(command -v mvn)" >> "$GITHUB_ENV"
+          else
+            maven_ver="3.9.16"
+            maven_dir="$RUNNER_TEMP/nightly-maven-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+            mkdir -p "$maven_dir"
+            curl -fsSL "https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/${maven_ver}/apache-maven-${maven_ver}-bin.tar.gz" \
+              | tar -xz --strip-components=1 -C "$maven_dir"
+            echo "$maven_dir/bin" >> "$GITHUB_PATH"
+            echo "VERIFY_MVN=$maven_dir/bin/mvn" >> "$GITHUB_ENV"
+          fi
+
+      - name: Run full verification and coverage suite
+        id: verify
+        run: |
+          set -euo pipefail
+          overlay_file=""
+          for candidate in overlay/*.tar.gz; do
+            if [ -f "$candidate" ]; then
+              overlay_file="$candidate"
+              break
+            fi
+          done
+          args=(
+            python3 tooling/.github/scripts/nightly.py run-verify
+            --catalog tooling/.github/downstream-projects.json
+            --project "${{ matrix.name }}"
+            --checkout target-repo
+            --repository "$VERIFY_M2"
+            --settings "$VERIFY_SETTINGS"
+            --log-dir "$VERIFY_LOGS"
+          )
+          if [ -n "$overlay_file" ]; then
+            args+=(--overlay "$overlay_file")
+          fi
+          "${args[@]}"
+
+      - name: Submit SonarQube analysis and quality gate
+        if: success() && env.SONAR_TOKEN != ''
+        continue-on-error: true
+        run: |
+          python3 tooling/.github/scripts/nightly.py run-sonar \
+            --catalog tooling/.github/downstream-projects.json \
+            --project "${{ matrix.name }}" \
+            --checkout target-repo \
+            --repository "$VERIFY_M2" \
+            --settings "$VERIFY_SETTINGS" \
+            --log-dir "$VERIFY_LOGS"
+
+      - name: Generate CycloneDX SBOM and scan CVEs
+        if: steps.verify.outcome == 'success'
+        continue-on-error: true
+        uses: instanto-io/instanto-poms/.github/actions/security-audit@main
+        with:
+          repo-name: ${{ matrix.name }}
+          revision: ${{ matrix.sha }}
+          working-directory: target-repo
+          maven-executable: ${{ env.VERIFY_MVN }}
+          maven-settings: ${{ env.VERIFY_SETTINGS }}
+          maven-repo-local: ${{ env.VERIFY_M2 }}
+          append-step-summary: 'true'
+
+      - name: Collect Stage 3 status and security metrics
+        if: always()
+        env:
+          PROJECT_NAME: ${{ matrix.name }}
+          PROJECT_SHA: ${{ matrix.sha }}
+          VERIFY_OUTCOME: ${{ steps.verify.outcome }}
+        run: |
+          set -euo pipefail
+          mkdir -p stage3-out
+          python3 - <<'PYSTATUS'
+          import json, os, pathlib, shutil
+          project = os.environ["PROJECT_NAME"]
+          status = "passed" if os.environ["VERIFY_OUTCOME"] == "success" else "failed"
+          out = pathlib.Path("stage3-out")
+          (out / f"{project}.status.json").write_text(
+              json.dumps({"project": project, "sha": os.environ["PROJECT_SHA"], "status": status}, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          summary_json = pathlib.Path("target-repo/target/security/security-summary.json")
+          if summary_json.is_file():
+              shutil.copy2(summary_json, out / f"{project}.security-summary.json")
+          PYSTATUS
+          if [ -d "$VERIFY_LOGS" ]; then
+            cp -R "$VERIFY_LOGS"/. stage3-out/ || true
+          fi
+
+      - name: Upload Stage 3 metrics and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-metrics-${{ matrix.name }}
+          path: stage3-out
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Clean verification workspace
+        if: always()
+        run: |
+          if [ -n "${VERIFY_WORKSPACE:-}" ]; then rm -rf -- "$VERIFY_WORKSPACE"; fi
+          if [ -n "${PLAYWRIGHT_BROWSERS_PATH:-}" ]; then rm -rf -- "$PLAYWRIGHT_BROWSERS_PATH"; fi
+
+  finalize:
+    name: Stage 4 - Dashboard & Baseline State
+    needs: [plan, compat, verify-and-security]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out shared CI tooling
+        uses: actions/checkout@v7
+        with:
+          repository: instanto-io/instanto-poms
+          ref: main
+          path: tooling
+          persist-credentials: false
+
+      - name: Download nightly run artifacts
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Render unified Nightly Dashboard
+        run: |
+          set -euo pipefail
+          plan_summary="artifacts/plan-artifacts/plan-summary.md"
+          if [ -f "$plan_summary" ]; then
+            cat "$plan_summary" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          mode="${{ needs.plan.outputs.mode }}"
+          if [ "$mode" = "run" ]; then
+            args=(
+              python3 tooling/.github/scripts/security_report.py dashboard
+              --md-out nightly-dashboard.md
+              --append-step-summary
+            )
+            compat_summary="artifacts/compat-reports/compat-summary.md"
+            if [ -f "$compat_summary" ]; then
+              args+=(--compat-summary "$compat_summary")
+            fi
+            while IFS= read -r -d '' file; do
+              args+=(--input "$file")
+            done < <(find artifacts -path 'artifacts/nightly-metrics-*/*.security-summary.json' -print0 2>/dev/null | sort -z)
+            "${args[@]}"
+          fi
+
+      - name: Check out nightly baseline branch for update
+        if: >-
+          !inputs.dry-run &&
+          needs.plan.result == 'success' &&
+          needs.plan.outputs.mode != 'skip'
+        continue-on-error: true
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.state-branch }}
+          path: state-repo
+          fetch-depth: 1
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Persist updated baseline.json to nightly-state
+        if: >-
+          !inputs.dry-run &&
+          needs.plan.result == 'success' &&
+          needs.plan.outputs.mode != 'skip'
+        env:
+          STATE_BRANCH: ${{ inputs.state-branch }}
+          PLAN_MODE: ${{ needs.plan.outputs.mode }}
+          REPO_SLUG: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ ! -d state-repo/.git ]; then
+            mkdir -p state-repo
+            git -C state-repo init -q
+            git -C state-repo remote add origin "https://github.com/${REPO_SLUG}.git"
+            git -C state-repo checkout --orphan "$STATE_BRANCH"
+          fi
+          if [ "$PLAN_MODE" = "bootstrap" ]; then
+            cp artifacts/plan-artifacts/bootstrap-baseline.json state-repo/baseline.json
+          else
+            if [ ! -f state-repo/baseline.json ]; then
+              echo '{"schema_version": 1, "updated_at": null, "projects": {}}' > state-repo/baseline.json
+            fi
+            args=(
+              python3 tooling/.github/scripts/nightly.py update-baseline
+              --catalog tooling/.github/downstream-projects.json
+              --baseline state-repo/baseline.json
+              --plan artifacts/plan-artifacts/plan.json
+              --out state-repo/baseline.json
+            )
+            compat_json="artifacts/compat-reports/compat-results.json"
+            if [ -f "$compat_json" ]; then
+              args+=(--compat-results "$compat_json")
+            fi
+            while IFS= read -r -d '' sfile; do
+              entry=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d["project"] + "=" + d["status"])' "$sfile")
+              args+=(--stage3-status "$entry")
+            done < <(find artifacts -path 'artifacts/nightly-metrics-*/*.status.json' -print0 2>/dev/null | sort -z)
+            "${args[@]}"
+          fi
+
+          python3 - <<'PYPUSH'
+          import base64, os, subprocess, sys
+
+          repo = os.environ["REPO_SLUG"]
+          branch = os.environ["STATE_BRANCH"]
+          mode = os.environ["PLAN_MODE"]
+          run_num = os.environ.get("GITHUB_RUN_NUMBER", "0")
+          token = os.environ["GH_TOKEN"]
+          cwd = "state-repo"
+
+          subprocess.run(["git", "config", "user.name", "github-actions[bot]"], cwd=cwd, check=True)
+          subprocess.run(["git", "config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com"], cwd=cwd, check=True)
+          subprocess.run(["git", "add", "baseline.json"], cwd=cwd, check=True)
+          diff = subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=cwd)
+          if diff.returncode == 0:
+              print("baseline.json unchanged.")
+              sys.exit(0)
+          subprocess.run(["git", "commit", "-m", f"chore(nightly): update baseline ({mode}, run {run_num})"], cwd=cwd, check=True)
+
+          auth = base64.b64encode(f"x-access-token:{token}".encode()).decode()
+          git_env = os.environ.copy()
+          git_env.update(
+              GIT_CONFIG_COUNT="1",
+              GIT_CONFIG_KEY_0="http.https://github.com/.extraheader",
+              GIT_CONFIG_VALUE_0=f"AUTHORIZATION: basic {auth}",
+          )
+          for attempt in range(3):
+              res = subprocess.run(["git", "push", "origin", f"HEAD:{branch}"], cwd=cwd, env=git_env)
+              if res.returncode == 0:
+                  sys.exit(0)
+              subprocess.run(["git", "fetch", "--depth=1", "origin", branch], cwd=cwd, env=git_env)
+              subprocess.run(["git", "pull", "--rebase", "origin", branch], cwd=cwd, env=git_env)
+          print(f"::error::Failed to push baseline.json to {branch}", flush=True)
+          sys.exit(1)
+          PYPUSH
+
+      - name: Enforce overall nightly outcome
+        if: >-
+          needs.plan.result == 'failure' ||
+          needs.compat.result == 'failure' ||
+          needs.verify-and-security.result == 'failure'
+        run: |
+          echo "::error::Nightly cascade failed (plan=${{ needs.plan.result }}, compat=${{ needs.compat.result }}, verify-and-security=${{ needs.verify-and-security.result }})."
+          exit 1

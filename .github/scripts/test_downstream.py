@@ -147,6 +147,54 @@ class DownstreamTests(unittest.TestCase):
         for upstream in ('sarto-scene', 'sarto-graphics'):
             self.assertIn('ports', downstream.affected_projects(projects, upstream))
 
+    def test_checked_in_catalog_invariants_and_sccs(self):
+        projects = downstream.load_catalog(Path(__file__).parents[1] / 'downstream-projects.json')
+        self.assertGreaterEqual(len(projects), 44)
+        self.assertNotIn('domino-widgets', projects['sarto']['dependencies'])
+        self.assertNotIn('sarto', projects['sarto-poms']['dependencies'])
+        self.assertNotIn('ports', projects['ports'].get('runner_labels', []))
+        self.assertIn('bootstrap-widgets', projects['ports']['dependencies'])
+        self.assertIn('teavm-compat', projects['ports']['dependencies'])
+        groups = downstream.build_groups(projects, set(projects))
+        pos = {name: i for i, g in enumerate(groups) for name in g}
+        self.assertLess(pos['instanto-poms'], pos['instanto-teavm'])
+        self.assertLess(pos['instanto-teavm'], pos['teavm-compat'])
+        self.assertLess(pos['teavm-compat'], pos['bootstrap-widgets'])
+        self.assertLess(pos['bootstrap-widgets'], pos['ports'])
+
+    def test_expand_placeholders_and_env_preserve_unrelated_braces(self):
+        ph = {
+            'checkout': '/work/repo',
+            'settings': '/work/settings.xml',
+            'm2': '/work/m2',
+            'mvn': '/work/repo/mvnw',
+            'runner_temp': '/tmp/rt',
+        }
+        args = downstream.expand_placeholders(
+            ['-Dsonar.coverageReportPaths={checkout}/target/teavm-coverage.xml', '-DargLine=@{instanto.coverage.argLine}'],
+            ph,
+        )
+        self.assertEqual(
+            ['-Dsonar.coverageReportPaths=/work/repo/target/teavm-coverage.xml', '-DargLine=@{instanto.coverage.argLine}'],
+            args,
+        )
+        env = downstream.expand_env({'GRADLE_USER_HOME': '{runner_temp}/gradle'}, ph)
+        self.assertEqual({'GRADLE_USER_HOME': '/tmp/rt/gradle'}, env)
+
+    def test_catalog_validates_env_and_post_verify_commands(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'catalog.json'
+            bad_cases = [
+                {'root': {'dependencies': [], 'env': {'X': 123}}},
+                {'root': {'dependencies': [], 'post_verify_commands': [{'cmd': []}]}},
+                {'root': {'dependencies': [], 'post_verify_commands': [{'cmd': ['echo'], 'cwd': ''}]}},
+                {'root': {'dependencies': [], 'post_verify_commands': [{'cmd': ['echo'], 'if_sonar': 'yes'}]}},
+            ]
+            for projects in bad_cases:
+                path.write_text(json.dumps({'schema_version': 1, 'organisation': 'instanto-io', 'projects': projects}))
+                with self.assertRaises(ValueError):
+                    downstream.load_catalog(path)
+
 
 if __name__ == '__main__':
     unittest.main()

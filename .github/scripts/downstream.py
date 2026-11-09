@@ -31,9 +31,55 @@ def load_catalog(path):
         repository = config.get("repository", "instanto-io/" + name)
         if not re.fullmatch(r"(?:instanto-io|cstainton)/[a-z0-9][a-z0-9.-]*", repository):
             raise ValueError(f"Invalid repository for {name}")
-        for check in [config.get("arguments", []), *config.get("checks", [])]:
+        for check in [config.get("arguments", []), *config.get("checks", []), *config.get("full_checks", [])]:
             if not isinstance(check, list) or not all(isinstance(arg, str) for arg in check):
                 raise ValueError(f"Checks for {name} must be argument arrays")
+        if "verify_goals" in config:
+            goals = config["verify_goals"]
+            if not isinstance(goals, list) or not all(isinstance(arg, str) for arg in goals) or not goals:
+                raise ValueError(f"verify_goals for {name} must be a non-empty string array")
+        if "runner_labels" in config:
+            labels = config["runner_labels"]
+            if not isinstance(labels, list) or not all(isinstance(arg, str) for arg in labels) or not labels:
+                raise ValueError(f"runner_labels for {name} must be a non-empty string array")
+        if "install_playwright" in config and not isinstance(config["install_playwright"], bool):
+            raise ValueError(f"install_playwright for {name} must be a boolean")
+        if "sonar_args" in config:
+            sargs = config["sonar_args"]
+            if not isinstance(sargs, list) or not all(isinstance(arg, str) for arg in sargs):
+                raise ValueError(f"sonar_args for {name} must be a string array")
+        if "node_version" in config:
+            nv = config["node_version"]
+            if not isinstance(nv, str) or not nv.strip():
+                raise ValueError(f"node_version for {name} must be a non-empty string")
+        if "env" in config:
+            env_cfg = config["env"]
+            if not isinstance(env_cfg, dict) or not all(
+                isinstance(k, str) and k and isinstance(v, str) for k, v in env_cfg.items()
+            ):
+                raise ValueError(f"env for {name} must be a string map")
+        if "post_verify_commands" in config:
+            cmds = config["post_verify_commands"]
+            if not isinstance(cmds, list):
+                raise ValueError(f"post_verify_commands for {name} must be an array")
+            for step in cmds:
+                if not isinstance(step, dict):
+                    raise ValueError(f"post_verify_commands entries for {name} must be objects")
+                cmd = step.get("cmd")
+                if not isinstance(cmd, list) or not cmd or not all(isinstance(arg, str) for arg in cmd):
+                    raise ValueError(f"post_verify_commands cmd for {name} must be a non-empty string array")
+                if "env" in step:
+                    step_env = step["env"]
+                    if not isinstance(step_env, dict) or not all(
+                        isinstance(k, str) and k and isinstance(v, str) for k, v in step_env.items()
+                    ):
+                        raise ValueError(f"post_verify_commands env for {name} must be a string map")
+                if "cwd" in step and (not isinstance(step["cwd"], str) or not step["cwd"].strip()):
+                    raise ValueError(f"post_verify_commands cwd for {name} must be a non-empty string")
+                if "if_sonar" in step and not isinstance(step["if_sonar"], bool):
+                    raise ValueError(f"post_verify_commands if_sonar for {name} must be a boolean")
+                if "allow_failure" in step and not isinstance(step["allow_failure"], bool):
+                    raise ValueError(f"post_verify_commands allow_failure for {name} must be a boolean")
     return projects
 
 
@@ -89,9 +135,10 @@ def api(path):
         return json.load(response)
 
 
-def checkout(repo, destination):
-    info = api("repos/" + repo)
-    sha = api("repos/" + repo + "/commits/" + info["default_branch"])["sha"]
+def checkout(repo, destination, sha=None):
+    if not sha:
+        info = api("repos/" + repo)
+        sha = api("repos/" + repo + "/commits/" + info["default_branch"])["sha"]
     # Keep credentials out of URLs, arguments, subprocess output and persisted git config.
     import base64
     env = os.environ.copy()
@@ -108,6 +155,29 @@ def checkout(repo, destination):
     subprocess.run(["git", "checkout", "--quiet", "--detach", "FETCH_HEAD"],
                    cwd=destination, check=True, env=env)
     return sha
+
+
+def fast_skip_flags(existing=(), skip_jacoco=True):
+    """Return Maven flags to skip heavy analysis plugins during fast/bootstrap passes."""
+    existing_keys = {arg.split("=", 1)[0] for arg in existing}
+    candidates = [
+        "-Dspotbugs.skip=true",
+        "-Dmaven.javadoc.skip=true",
+        "-Dspotless.skip=true",
+    ]
+    if skip_jacoco:
+        candidates.append("-Djacoco.skip=true")
+    return [flag for flag in candidates if flag.split("=", 1)[0] not in existing_keys]
+
+
+def strip_remote_repositories(repository_root):
+    """Clear remote resolver markers so exported local snapshots resolve cleanly across jobs."""
+    root = Path(repository_root)
+    if not root.exists():
+        return
+    for pattern in ("_remote.repositories", "*.lastUpdated"):
+        for marker in root.rglob(pattern):
+            marker.unlink(missing_ok=True)
 
 
 def isolate_upstream(source, destination):
@@ -151,17 +221,41 @@ def write_settings(path, sources):
     path.chmod(0o600)
 
 
-def run_maven(source, arguments, repository, settings, log):
+def resolve_maven_executable(source):
     wrapper = source / "mvnw"
-    executable = str(wrapper) if wrapper.is_file() and os.access(wrapper, os.X_OK) else "mvn"
+    return str(wrapper) if wrapper.is_file() and os.access(wrapper, os.X_OK) else "mvn"
+
+
+def expand_placeholders(values, placeholders):
+    expanded = []
+    for value in values:
+        item = value
+        for key, replacement in placeholders.items():
+            item = item.replace("{" + key + "}", replacement)
+        expanded.append(item)
+    return expanded
+
+
+def expand_env(env_map, placeholders):
+    return {
+        key: expand_placeholders([value], placeholders)[0]
+        for key, value in env_map.items()
+    }
+
+
+def run_maven(source, arguments, repository, settings, log, env=None):
+    executable = resolve_maven_executable(source)
     command = [executable, "--batch-mode", "--no-transfer-progress", "--errors", "--fail-at-end",
                "--settings", str(settings), "-Dmaven.repo.local=" + str(repository),
                "-Dmaven.top-level-basedir=" + str(source.resolve()), *arguments]
+    merged_env = os.environ.copy()
+    if env:
+        merged_env.update(env)
     # Pin the workspace root as well as cwd: Quarkus can otherwise discover an enclosing
     # checkout when Actions places the upstream source inside its existing workspace.
     with log.open("w") as output:
         process = subprocess.Popen(command, cwd=source, stdout=subprocess.PIPE,
-                                   stderr=subprocess.STDOUT, text=True)
+                                   stderr=subprocess.STDOUT, text=True, env=merged_env)
         for line in process.stdout:
             output.write(line)
             print(line, end="", flush=True)
@@ -235,6 +329,8 @@ def main():
     parser.add_argument("--plan-only", action="store_true")
     parser.add_argument("--verify-upstream", action="store_true",
                         help="Run upstream tests too, for manual runs without a preceding verification")
+    parser.add_argument("--skip-analysis", action="store_true",
+                        help="Skip SpotBugs, Javadoc, Spotless, and JaCoCo during compatibility builds")
     args = parser.parse_args()
     projects = load_catalog(args.catalog)
     affected = affected_projects(projects, args.upstream)
@@ -272,23 +368,39 @@ def main():
         if name in checkout_failed:
             return False
         print(f"::group::{name} {phase} at {revisions[name]}", flush=True)
+        placeholders = {
+            "checkout": str(sources[name].resolve()),
+            "settings": str(settings),
+            "m2": str(repository),
+            "mvn": resolve_maven_executable(sources[name]),
+            "runner_temp": os.environ.get("RUNNER_TEMP", str(workspace)),
+        }
+        repo_env = expand_env(projects[name].get("env", {}), placeholders)
         # The seed alone refreshes remote snapshots. Subsequent builds must use locally
         # installed upstream artifacts rather than racing another upstream publication.
         arguments = ["--update-snapshots" if phase == "seed" else "--no-snapshot-updates",
-                     *projects[name].get("arguments", []), "clean", "install"]
+                     *expand_placeholders(projects[name].get("arguments", []), placeholders),
+                     "clean", "install"]
         skip_tests = phase == "install-cycle" or (phase == "seed" and not args.verify_upstream)
         if skip_tests:
             arguments.append("-DskipTests")
+        if skip_tests or args.skip_analysis:
+            arguments.extend(fast_skip_flags(arguments, skip_jacoco=skip_tests or args.skip_analysis))
         try:
             ok = run_maven(sources[name], arguments, repository, settings,
-                           output / f"{name}-{phase}.log")
+                           output / f"{name}-{phase}.log", env=repo_env)
+            strip_remote_repositories(repository)
         except OSError as error:
             print(f"::error::Cannot build {name}: {type(error).__name__}")
             ok = False
         if ok and not skip_tests:
             for index, check in enumerate(projects[name].get("checks", [])):
-                ok = run_maven(sources[name], ["--no-snapshot-updates", *check], repository,
-                               settings, output / f"{name}-{phase}-check-{index}.log")
+                check_args = ["--no-snapshot-updates", *expand_placeholders(check, placeholders)]
+                if args.skip_analysis:
+                    check_args.extend(fast_skip_flags(check_args, skip_jacoco=True))
+                ok = run_maven(sources[name], check_args, repository, settings,
+                               output / f"{name}-{phase}-check-{index}.log", env=repo_env)
+                strip_remote_repositories(repository)
                 if not ok:
                     break
         print("::endgroup::", flush=True)

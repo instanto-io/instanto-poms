@@ -2,23 +2,525 @@
   "schema_version": 1,
   "organisation": "instanto-io",
   "projects": {
+    "acetea": {
+      "dependencies": [
+        "instanto-poms",
+        "instanto-teavm",
+        "teavm-compat"
+      ],
+      "install_playwright": true,
+      "verify_goals": [
+        "clean",
+        "install"
+      ],
+      "full_checks": [
+        [
+          "-f",
+          "acegwt-demo/pom.xml",
+          "org.codehaus.mojo:exec-maven-plugin:3.5.0:java",
+          "-Dexec.classpathScope=test",
+          "-Dexec.mainClass=com.microsoft.playwright.CLI",
+          "-Dexec.args=install chromium webkit"
+        ],
+        [
+          "verify"
+        ]
+      ]
+    },
+    "bootstrap-widgets": {
+      "dependencies": [
+        "cucumber-tea",
+        "instanto-poms",
+        "instanto-teavm",
+        "teacoco",
+        "teavm-compat",
+        "webapp-testkit"
+      ],
+      "install_playwright": true,
+      "node_version": "22",
+      "verify_goals": [
+        "clean",
+        "install"
+      ],
+      "full_checks": [
+        [
+          "-f",
+          "gwt/gwt-bootstrap3-showcase/pom.xml",
+          "-DskipTests",
+          "-Dgwt.forceCompilation=true",
+          "gwt:compile"
+        ],
+        [
+          "-f",
+          "gwt/gwt-bootstrap3-browser-fixtures/pom.xml",
+          "-DskipTests",
+          "-Dgwt.forceCompilation=true",
+          "gwt:compile"
+        ],
+        [
+          "-f",
+          "gwt/gwt-bootstrap5-showcase/pom.xml",
+          "-DskipTests",
+          "-Dgwt.forceCompilation=true",
+          "gwt:compile"
+        ],
+        [
+          "-f",
+          "gwt/gwt-bootstrap5-browser-fixtures/pom.xml",
+          "-DskipTests",
+          "-Dgwt.forceCompilation=true",
+          "gwt:compile"
+        ],
+        [
+          "-pl",
+          "showcase-site",
+          "-am",
+          "-DskipTests",
+          "-Dsource.maps.flag=--required",
+          "package"
+        ],
+        [
+          "-f",
+          "testing/showcase-browser-tests/pom.xml",
+          "test"
+        ]
+      ],
+      "post_verify_commands": [
+        {
+          "cmd": [
+            "java",
+            "build-tools/BrowserCoverage.java",
+            "--self-test"
+          ]
+        },
+        {
+          "cmd": [
+            "java",
+            "build-tools/BrowserCoverage.java"
+          ]
+        },
+        {
+          "cmd": [
+            "bash",
+            "scripts/smoke-showcase-pages.sh"
+          ]
+        },
+        {
+          "cmd": [
+            "node",
+            "scripts/run-datepicker-tests.mjs"
+          ]
+        },
+        {
+          "cmd": [
+            "node",
+            "scripts/run-datepicker-tests.mjs"
+          ],
+          "env": {
+            "BROWSER_TEST_TIMEZONE": "America/Los_Angeles"
+          }
+        },
+        {
+          "cmd": [
+            "node",
+            "scripts/run-showcase-layout-tests.mjs"
+          ]
+        },
+        {
+          "cmd": [
+            "node",
+            "scripts/run-browser-behaviour-tests.mjs"
+          ]
+        }
+      ]
+    },
+    "codemirror-java": {
+      "dependencies": [
+        "instanto-poms",
+        "instanto-teavm",
+        "teavm-compat"
+      ],
+      "install_playwright": true,
+      "node_version": "22",
+      "verify_goals": [
+        "clean",
+        "install"
+      ],
+      "full_checks": [
+        [
+          "-f",
+          "codemirror-showcase/pom.xml",
+          "org.codehaus.mojo:exec-maven-plugin:3.5.0:java",
+          "-Dexec.classpathScope=test",
+          "-Dexec.mainClass=com.microsoft.playwright.CLI",
+          "-Dexec.args=install chromium webkit"
+        ],
+        [
+          "verify"
+        ],
+        [
+          "-Pproduction",
+          "clean",
+          "verify"
+        ]
+      ],
+      "post_verify_commands": [
+        {
+          "cmd": [
+            "npm",
+            "ci"
+          ]
+        },
+        {
+          "cmd": [
+            "npm",
+            "run",
+            "check:assets"
+          ]
+        },
+        {
+          "cmd": [
+            "git",
+            "diff",
+            "--exit-code",
+            "--",
+            "codemirror-webjar/src/main/resources"
+          ]
+        }
+      ]
+    },
     "cucumber-tea": {
       "dependencies": [
+        "instanto-poms",
+        "instanto-teavm",
         "sarto-edge"
+      ],
+      "verify_goals": [
+        "clean",
+        "test"
+      ],
+      "full_checks": [
+        [
+          "test",
+          "-Pminiflare"
+        ]
+      ]
+    },
+    "domino-widgets": {
+      "dependencies": [
+        "instanto-poms",
+        "instanto-teavm",
+        "teavm-compat"
+      ],
+      "env": {
+        "MAVEN_OPTS": "-Xmx3g"
+      },
+      "arguments": [
+        "-pl",
+        "!showcase-teavm,!build-verification"
+      ],
+      "install_playwright": true,
+      "verify_goals": [
+        "clean",
+        "install"
+      ],
+      "checks": [
+        [
+          "-f",
+          "showcase-teavm/pom.xml",
+          "clean",
+          "install"
+        ],
+        [
+          "-f",
+          "build-verification/pom.xml",
+          "clean",
+          "install"
+        ]
+      ],
+      "full_checks": [
+        [
+          "-f",
+          "showcase-teavm/pom.xml",
+          "clean",
+          "install"
+        ],
+        [
+          "-f",
+          "build-verification/pom.xml",
+          "clean",
+          "install"
+        ],
+        [
+          "-f",
+          "browser-tests/webkit/pom.xml",
+          "org.codehaus.mojo:exec-maven-plugin:3.6.3:java",
+          "-Dexec.mainClass=com.microsoft.playwright.CLI",
+          "-Dexec.classpathScope=test",
+          "-Dexec.args=install chromium firefox webkit"
+        ],
+        [
+          "-f",
+          "browser-tests/teavm/pom.xml",
+          "-Dtest=GalleryAdvancedStepsTest#scenario_The_original_table_columns_groups_example_renders*",
+          "test"
+        ],
+        [
+          "-f",
+          "browser-tests/teavm/pom.xml",
+          "test"
+        ],
+        [
+          "-f",
+          "browser-tests/teavm/pom.xml",
+          "-Dtest=GalleryComponentsStepsTest",
+          "-Dbrowser.engine=firefox",
+          "-Dteavm.junit.js.runner=browser-firefox",
+          "test"
+        ],
+        [
+          "-f",
+          "browser-tests/teavm/pom.xml",
+          "-Dtest=GalleryAdvancedStepsTest",
+          "-Dbrowser.engine=firefox",
+          "-Dteavm.junit.js.runner=browser-firefox",
+          "test"
+        ],
+        [
+          "-f",
+          "browser-tests/teavm/pom.xml",
+          "-Dtest=LayoutStepsTest,NativeStepsTest,ReuseStepsTest,TableStepsTest,VisualReferenceStepsTest,WidgetStepsTest,Release213StepsTest,EcosystemStepsTest,DataStepsTest,ShowcaseLibrariesStepsTest",
+          "-Dbrowser.engine=firefox",
+          "-Dteavm.junit.js.runner=browser-firefox",
+          "test"
+        ],
+        [
+          "-f",
+          "browser-tests/webkit/pom.xml",
+          "test"
+        ],
+        [
+          "-f",
+          "browser-tests/platform-checks/pom.xml",
+          "test"
+        ],
+        [
+          "-f",
+          "examples/pom.xml",
+          "clean",
+          "verify"
+        ]
+      ],
+      "post_verify_commands": [
+        {
+          "cmd": [
+            "{mvn}",
+            "--no-snapshot-updates",
+            "--settings",
+            "{settings}",
+            "-Dmaven.repo.local={m2}",
+            "-N",
+            "io.instanto:domino-build-maven-plugin:0.1.0-SNAPSHOT:analysis",
+            "-Ddomino.analysis.indexOnly=true"
+          ]
+        }
+      ]
+    },
+    "drone-foak-poc": {
+      "dependencies": [
+        "instanto-poms",
+        "instanto-teavm",
+        "sarto",
+        "sarto-async",
+        "sarto-cdi",
+        "sarto-codec",
+        "sarto-config",
+        "sarto-events",
+        "sarto-geo",
+        "sarto-geometry",
+        "sarto-model",
+        "sarto-persistence",
+        "sarto-poms",
+        "sarto-resources",
+        "sarto-scene",
+        "sarto-signals",
+        "sarto-xml"
+      ],
+      "arguments": [
+        "-Dspotless.skip=true",
+        "-Dteavm.junit.js.runner=none"
+      ],
+      "verify_goals": [
+        "clean",
+        "install"
       ]
     },
     "instanto-poms": {
-      "dependencies": []
+      "dependencies": [],
+      "node_version": "22",
+      "verify_goals": [
+        "clean",
+        "verify"
+      ],
+      "post_verify_commands": [
+        {
+          "cmd": [
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            ".github/scripts",
+            "-p",
+            "test_*.py",
+            "-v"
+          ]
+        },
+        {
+          "cmd": [
+            "python3",
+            ".github/scripts/verify_downstream_maven.py"
+          ]
+        },
+        {
+          "cmd": [
+            "python3",
+            "src/it/verify-coverage.py"
+          ]
+        },
+        {
+          "cmd": [
+            "python3",
+            "src/it/verify-terser.py"
+          ]
+        }
+      ]
+    },
+    "instanto-teavm": {
+      "dependencies": [
+        "instanto-poms"
+      ],
+      "arguments": [
+        "-Pteavm-browser-tests",
+        "-Dspotless.skip=true",
+        "-Dinstanto.teavm.threadLocalChecks=true"
+      ],
+      "verify_goals": [
+        "clean",
+        "install"
+      ]
+    },
+    "lienzo-java": {
+      "dependencies": [
+        "instanto-poms",
+        "instanto-teavm",
+        "teavm-compat"
+      ],
+      "install_playwright": true,
+      "verify_goals": [
+        "clean",
+        "install"
+      ],
+      "full_checks": [
+        [
+          "-f",
+          "lienzo-showcase-gwt/pom.xml",
+          "org.codehaus.mojo:exec-maven-plugin:3.6.3:java",
+          "-Dexec.classpathScope=test",
+          "-Dexec.mainClass=com.microsoft.playwright.CLI",
+          "-Dexec.args=install chromium webkit"
+        ],
+        [
+          "clean",
+          "verify"
+        ],
+        [
+          "-Pproduction",
+          "clean",
+          "verify"
+        ]
+      ]
+    },
+    "material-widgets": {
+      "dependencies": [
+        "instanto-poms",
+        "instanto-teavm",
+        "teavm-compat"
+      ],
+      "install_playwright": true,
+      "verify_goals": [
+        "clean",
+        "verify"
+      ],
+      "full_checks": [
+        [
+          "-Pshowcase-tests",
+          "clean",
+          "verify"
+        ],
+        [
+          "-Pshowcase-tests",
+          "-Dmaterial.test.browser=browser-firefox",
+          "clean",
+          "verify"
+        ],
+        [
+          "-Pwebkit-tests",
+          "clean",
+          "verify"
+        ],
+        [
+          "-Pshowcase-tests,production",
+          "clean",
+          "verify"
+        ],
+        [
+          "-Pshowcase-tests,production",
+          "-Dmaterial.test.browser=browser-firefox",
+          "clean",
+          "verify"
+        ],
+        [
+          "-Pwebkit-tests,production",
+          "clean",
+          "verify"
+        ],
+        [
+          "-f",
+          "examples/hello-material/pom.xml",
+          "clean",
+          "verify"
+        ]
+      ]
     },
     "mockatcha": {
       "dependencies": [
-        "instanto-poms"
+        "instanto-poms",
+        "instanto-teavm"
+      ],
+      "verify_goals": [
+        "clean",
+        "test"
+      ],
+      "full_checks": [
+        [
+          "test",
+          "-Dmockatcha.test.browser=browser-firefox"
+        ],
+        [
+          "test",
+          "-Dteavm.junit.wasm-gc=true",
+          "-Dteavm.junit.wasm-gc.runner=browser-chrome",
+          "-Dteavm.junit.js=false"
+        ]
       ]
     },
     "ports": {
       "repository": "cstainton/ports",
       "dependencies": [
+        "bootstrap-widgets",
         "instanto-poms",
+        "instanto-teavm",
         "sarto",
         "sarto-async",
         "sarto-auth",
@@ -36,6 +538,7 @@
         "sarto-scene",
         "sarto-transactions",
         "sarto-xml",
+        "teavm-compat",
         "verrai"
       ]
     },
@@ -43,6 +546,7 @@
       "dependencies": [
         "cucumber-tea",
         "instanto-poms",
+        "instanto-teavm",
         "mockatcha",
         "sarto-async",
         "sarto-auth",
@@ -63,6 +567,65 @@
         "sarto-soap",
         "sarto-transactions",
         "verrai"
+      ],
+      "arguments": [
+        "-DskipITs"
+      ],
+      "verify_goals": [
+        "clean",
+        "install"
+      ],
+      "full_checks": [
+        [
+          "-Pteavm-browser-tests",
+          "-pl",
+          ":sarto-invoke-teavm",
+          "-am",
+          "-DskipITs",
+          "-Dtest=io.instanto.sarto.invoke.teavm.**",
+          "-Dsurefire.failIfNoSpecifiedTests=false",
+          "verify"
+        ],
+        [
+          "-Pintegration-tests",
+          "-pl",
+          ":sarto-integration-test,:sarto-browser-hosting-test,:sarto-cdi-integration-teavm-test",
+          "-am",
+          "-DskipITs",
+          "-Dtest=ServiceAvailabilityStepsTest,DirectStompAvailabilityStepsTest,Group*Test,PeerConnectionIdentityIntegrationTest,BrowserHostingStepsTest,WebWorkerRoundTripStepsTest,BootstrapWiringTest",
+          "-Dsurefire.failIfNoSpecifiedTests=false",
+          "verify"
+        ],
+        [
+          "-Pintegration-tests",
+          "-pl",
+          ":sarto-e2e",
+          "-am",
+          "-DskipITs",
+          "-Dtest=io.instanto.sarto.e2e.**",
+          "-Dsurefire.failIfNoSpecifiedTests=false",
+          "verify"
+        ],
+        [
+          "-f",
+          "tutorial/pom.xml",
+          "-DskipTests",
+          "package"
+        ],
+        [
+          "-f",
+          "services/pom.xml",
+          "-DskipTests",
+          "install"
+        ],
+        [
+          "-f",
+          "demos/pom.xml",
+          "-DskipTests",
+          "-pl",
+          "!*:tangram*",
+          "package"
+        ]
       ]
     },
     "sarto-async": {
@@ -79,6 +642,12 @@
         "sarto-codec",
         "sarto-edge",
         "sarto-poms"
+      ],
+      "full_checks": [
+        [
+          "verify",
+          "-Pintegration-tests"
+        ]
       ]
     },
     "sarto-cdi": {
@@ -95,6 +664,11 @@
         "sarto-xml"
       ]
     },
+    "sarto-codegen": {
+      "dependencies": [
+        "instanto-poms"
+      ]
+    },
     "sarto-config": {
       "dependencies": [
         "sarto-async",
@@ -108,6 +682,7 @@
       "dependencies": [
         "cucumber-tea",
         "instanto-poms",
+        "instanto-teavm",
         "mockatcha",
         "sarto",
         "sarto-async",
@@ -118,6 +693,22 @@
         "sarto-persistence",
         "sarto-rest",
         "webapp-testkit"
+      ],
+      "arguments": [
+        "-DskipITs"
+      ],
+      "verify_goals": [
+        "clean",
+        "install"
+      ],
+      "full_checks": [
+        [
+          "verify",
+          "-Pintegration-tests,examples",
+          "-pl",
+          ":sarto-edge-cf-cdi-codegen,sarto-edge-cf-integration-tests,:sarto-edge-cf-junit-tests,:sarto-edge-cf-example-typed-worker,:sarto-edge-cf-example-durable-counter,:sarto-edge-cf-example-d1-persistence,:sarto-edge-cf-example-platform-bindings,:sarto-edge-cf-example-wasm-loader,:sarto-edge-cf-example-wasi,:sarto-edge-cf-example-react-app",
+          "-am"
+        ]
       ]
     },
     "sarto-events": {
@@ -133,6 +724,15 @@
         "sarto-codec",
         "sarto-geometry",
         "sarto-model"
+      ],
+      "full_checks": [
+        [
+          "test",
+          "-pl",
+          "sarto-geo-projections",
+          "-am",
+          "-Pteavm-tests"
+        ]
       ]
     },
     "sarto-geometry": {
@@ -148,13 +748,18 @@
         "sarto-geometry",
         "sarto-poms"
       ],
+      "verify_goals": [
+        "clean",
+        "install"
+      ],
       "checks": [
         [
-          "test",
+          "verify",
           "-pl",
           ":sarto-graphics-composition-test",
           "-am",
-          "-Pteavm-tests"
+          "-Pteavm-tests",
+          "-DskipITs"
         ]
       ]
     },
@@ -198,12 +803,14 @@
     },
     "sarto-poms": {
       "dependencies": [
-        "instanto-poms"
+        "instanto-poms",
+        "instanto-teavm"
       ]
     },
     "sarto-relay": {
       "dependencies": [
         "instanto-poms",
+        "instanto-teavm",
         "mockatcha",
         "sarto",
         "sarto-auth",
@@ -212,6 +819,24 @@
         "sarto-edge",
         "sarto-events",
         "sarto-onejar"
+      ],
+      "verify_goals": [
+        "clean",
+        "install"
+      ],
+      "full_checks": [
+        [
+          "verify",
+          "-Pcloudflare-runtime"
+        ]
+      ],
+      "post_verify_commands": [
+        {
+          "cmd": [
+            "bash",
+            "./scripts/verify-relay-cdi-indexes.sh"
+          ]
+        }
       ]
     },
     "sarto-resources": {
@@ -228,12 +853,19 @@
         "sarto-cdi",
         "sarto-codec",
         "sarto-poms"
+      ],
+      "full_checks": [
+        [
+          "verify",
+          "-Pexamples"
+        ]
       ]
     },
     "sarto-scene": {
       "dependencies": [
         "cucumber-tea",
         "instanto-poms",
+        "instanto-teavm",
         "sarto-events",
         "sarto-geo",
         "sarto-geometry",
@@ -243,6 +875,7 @@
         "teavm-charba",
         "webapp-testkit"
       ],
+      "install_playwright": true,
       "checks": [
         [
           "test",
@@ -265,6 +898,12 @@
         "instanto-poms",
         "sarto-async",
         "sarto-codec"
+      ],
+      "full_checks": [
+        [
+          "verify",
+          "-Pexamples"
+        ]
       ]
     },
     "sarto-transactions": {
@@ -274,6 +913,13 @@
         "sarto-async",
         "sarto-cdi",
         "sarto-persistence"
+      ],
+      "full_checks": [
+        [
+          "verify",
+          "-DskipTests",
+          "-Pinspect"
+        ]
       ]
     },
     "sarto-xml": {
@@ -281,27 +927,202 @@
         "instanto-poms"
       ]
     },
+    "tea-dnd": {
+      "dependencies": [
+        "instanto-poms",
+        "instanto-teavm",
+        "teavm-compat"
+      ],
+      "install_playwright": true,
+      "verify_goals": [
+        "clean",
+        "install"
+      ],
+      "full_checks": [
+        [
+          "-f",
+          "tea-dnd-showcase-gwt/pom.xml",
+          "org.codehaus.mojo:exec-maven-plugin:3.6.3:java",
+          "-Dexec.classpathScope=test",
+          "-Dexec.mainClass=com.microsoft.playwright.CLI",
+          "-Dexec.args=install chromium webkit"
+        ],
+        [
+          "clean",
+          "verify"
+        ],
+        [
+          "-Pproduction",
+          "clean",
+          "verify"
+        ]
+      ]
+    },
+    "teacoco": {
+      "dependencies": [],
+      "verify_goals": [
+        "clean",
+        "install"
+      ],
+      "post_verify_commands": [
+        {
+          "cmd": [
+            "./gradlew",
+            "--no-daemon",
+            "check",
+            "publishToMavenLocal"
+          ],
+          "env": {
+            "GRADLE_USER_HOME": "{runner_temp}/teacoco-gradle"
+          }
+        }
+      ]
+    },
     "tealeaf": {
       "dependencies": [
         "instanto-poms",
+        "instanto-teavm",
         "teavm-compat"
+      ],
+      "install_playwright": true,
+      "verify_goals": [
+        "clean",
+        "verify"
+      ],
+      "full_checks": [
+        [
+          "-Pcoverage",
+          "-Dteavm.coverage.enabled=true",
+          "-Dteavm.coverage.mode=lines",
+          "-Dteavm.coverage.sourceRoots={checkout}/leaflet-compat/src/main/java",
+          "-Dteavm.coverage.dataDirectory={checkout}/leaflet-demo/target/teavm-coverage",
+          "-Dteavm.incremental=false",
+          "clean",
+          "verify"
+        ]
+      ],
+      "sonar_args": [
+        "-Dsonar.coverageReportPaths={checkout}/leaflet-demo/target/teavm-coverage.xml"
       ]
     },
     "teavm-charba": {
       "dependencies": [
         "instanto-poms",
+        "instanto-teavm",
         "teavm-compat"
+      ],
+      "install_playwright": true,
+      "verify_goals": [
+        "clean",
+        "verify"
       ]
     },
     "teavm-compat": {
       "dependencies": [
-        "instanto-poms"
+        "instanto-poms",
+        "instanto-teavm"
+      ],
+      "env": {
+        "MOZ_MARIONETTE": "1"
+      },
+      "install_playwright": true,
+      "node_version": "24",
+      "verify_goals": [
+        "clean",
+        "install"
+      ],
+      "full_checks": [
+        [
+          "-pl",
+          "gwt-user-compat-tests",
+          "-am",
+          "-Dteavm.junit.js.runner=browser-firefox",
+          "test"
+        ],
+        [
+          "-Pproduction",
+          "verify"
+        ]
+      ],
+      "post_verify_commands": [
+        {
+          "cmd": [
+            "npm",
+            "ci",
+            "--prefix",
+            "scripts/browser-coverage",
+            "--ignore-scripts"
+          ]
+        },
+        {
+          "cmd": [
+            "npm",
+            "test",
+            "--prefix",
+            "scripts/browser-coverage"
+          ]
+        },
+        {
+          "cmd": [
+            "scripts/browser-coverage/node_modules/.bin/playwright",
+            "install",
+            "chromium"
+          ]
+        },
+        {
+          "cmd": [
+            "npm",
+            "run",
+            "collect",
+            "--prefix",
+            "scripts/browser-coverage",
+            "--",
+            "--exclude-module",
+            "gwt-user-compat"
+          ]
+        },
+        {
+          "cmd": [
+            "{mvn}",
+            "--no-snapshot-updates",
+            "--settings",
+            "{settings}",
+            "-Dmaven.repo.local={m2}",
+            "-Pbrowser-coverage",
+            "-pl",
+            "gwt-user-compat-tests",
+            "verify"
+          ]
+        },
+        {
+          "cmd": [
+            "{mvn}",
+            "--no-snapshot-updates",
+            "--settings",
+            "{settings}",
+            "-Dmaven.repo.local={m2}",
+            "-pl",
+            "gwt-user-compat",
+            "org.jacoco:jacoco-maven-plugin:0.8.15:report",
+            "-Djacoco.dataFile={checkout}/gwt-user-compat-tests/target/jvm-baseline.exec"
+          ]
+        },
+        {
+          "cmd": [
+            "python3",
+            "scripts/check-gwt-coverage.py"
+          ]
+        }
+      ],
+      "sonar_args": [
+        "-Pbrowser-coverage"
       ]
     },
     "verrai": {
       "dependencies": [
         "cucumber-tea",
         "instanto-poms",
+        "instanto-teavm",
         "mockatcha",
         "sarto",
         "sarto-async",
@@ -314,12 +1135,116 @@
         "sarto-rest",
         "sarto-soap",
         "webapp-testkit"
+      ],
+      "install_playwright": true,
+      "node_version": "24",
+      "verify_goals": [
+        "clean",
+        "install"
+      ],
+      "full_checks": [
+        [
+          "package",
+          "-DskipTests",
+          "-Pdemo",
+          "-pl",
+          "verrai-demo",
+          "-am"
+        ]
+      ],
+      "post_verify_commands": [
+        {
+          "cmd": [
+            "npm",
+            "ci"
+          ],
+          "cwd": "browser-tests"
+        },
+        {
+          "cmd": [
+            "npx",
+            "playwright",
+            "install",
+            "chromium"
+          ],
+          "cwd": "browser-tests"
+        },
+        {
+          "cmd": [
+            "npm",
+            "test"
+          ],
+          "cwd": "browser-tests"
+        }
       ]
     },
     "webapp-testkit": {
       "dependencies": [
         "instanto-poms",
+        "instanto-teavm",
         "mockatcha"
+      ],
+      "arguments": [
+        "-Pteavm-browser-tests",
+        "-Dspotless.skip=true",
+        "-Dwebapp.testkit.test.browser=browser-chrome",
+        "-Dteavm.junit.wasm-gc.runner=browser-chrome",
+        "-Dteavm.junit.optimized=false",
+        "-Dteavm.junit.minified=true",
+        "-Dinstanto.teavm.threadLocalChecks=true"
+      ],
+      "install_playwright": true,
+      "node_version": "24",
+      "verify_goals": [
+        "clean",
+        "test"
+      ],
+      "full_checks": [
+        [
+          "test",
+          "-Pteavm-browser-tests",
+          "-Dspotless.skip=true",
+          "-Dwebapp.testkit.test.browser=browser-firefox",
+          "-Dteavm.junit.wasm-gc.runner=browser-firefox",
+          "-Dteavm.junit.optimized=false",
+          "-Dteavm.junit.minified=true",
+          "-Dinstanto.teavm.threadLocalChecks=true"
+        ]
+      ],
+      "post_verify_commands": [
+        {
+          "cmd": [
+            "npm",
+            "ci",
+            "--prefix",
+            "scripts/browser-coverage",
+            "--ignore-scripts"
+          ]
+        },
+        {
+          "cmd": [
+            "npm",
+            "test",
+            "--prefix",
+            "scripts/browser-coverage"
+          ]
+        },
+        {
+          "cmd": [
+            "scripts/browser-coverage/node_modules/.bin/playwright",
+            "install",
+            "chromium"
+          ]
+        },
+        {
+          "cmd": [
+            "npm",
+            "run",
+            "collect",
+            "--prefix",
+            "scripts/browser-coverage"
+          ]
+        }
       ]
     }
   }

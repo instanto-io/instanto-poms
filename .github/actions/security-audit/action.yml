@@ -1,0 +1,139 @@
+name: Security and coverage audit
+description: >
+  Generate a CycloneDX aggregate SBOM, scan dependencies for CVEs with Trivy,
+  and summarise SpotBugs, test, coverage, SBOM, and CVE reports.
+
+inputs:
+  repo-name:
+    description: Repository short name for report headers.
+    required: false
+    default: ''
+  revision:
+    description: Checked out git commit SHA for report metadata.
+    required: false
+    default: ''
+  working-directory:
+    description: Repository checkout directory to audit.
+    required: false
+    default: '.'
+  maven-executable:
+    description: Path to mvn or mvnw executable.
+    required: false
+    default: 'mvn'
+  maven-settings:
+    description: Path to Maven settings.xml (optional).
+    required: false
+    default: ''
+  maven-repo-local:
+    description: Custom local Maven repository path (optional).
+    required: false
+    default: ''
+  trivy-version:
+    description: Trivy release version tag (without leading v).
+    required: false
+    default: '0.76.2'
+  append-step-summary:
+    description: Append the generated report table to GITHUB_STEP_SUMMARY.
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - name: Generate CycloneDX SBOM
+      if: always() && hashFiles(format('{0}/pom.xml', inputs.working-directory)) != ''
+      continue-on-error: true
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        MVN_BIN: ${{ inputs.maven-executable || 'mvn' }}
+        MVN_SETTINGS: ${{ inputs.maven-settings }}
+        MVN_REPO_LOCAL: ${{ inputs.maven-repo-local }}
+      run: |
+        set -euo pipefail
+        args=(--batch-mode --no-transfer-progress -DskipTests -Dspotless.skip=true -Dspotbugs.skip=true -Dcyclonedx.skipAttach=true)
+        if [ -n "$MVN_SETTINGS" ]; then args+=(--settings "$MVN_SETTINGS"); fi
+        if [ -n "$MVN_REPO_LOCAL" ]; then args+=(--no-snapshot-updates "-Dmaven.repo.local=$MVN_REPO_LOCAL"); fi
+        "$MVN_BIN" "${args[@]}" org.cyclonedx:cyclonedx-maven-plugin:2.9.2:makeAggregateBom
+
+    - name: Install Trivy
+      if: always()
+      continue-on-error: true
+      shell: bash
+      env:
+        TRIVY_VERSION: ${{ inputs.trivy-version || '0.76.2' }}
+      run: |
+        set -euo pipefail
+        trivy_dir="$RUNNER_TEMP/trivy-bin-${TRIVY_VERSION}"
+        if [ ! -x "$trivy_dir/trivy" ]; then
+          arch=$(uname -m)
+          case "$arch" in
+            x86_64|amd64) trivy_arch="Linux-64bit" ;;
+            aarch64|arm64) trivy_arch="Linux-ARM64" ;;
+            *) echo "::warning::Unsupported architecture for Trivy: $arch"; exit 0 ;;
+          esac
+          archive="trivy_${TRIVY_VERSION}_${trivy_arch}.tar.gz"
+          checksums="trivy_${TRIVY_VERSION}_checksums.txt"
+          base_url="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}"
+          tmp=$(mktemp -d "$RUNNER_TEMP/trivy-dl.XXXXXX")
+          trap 'rm -rf "$tmp"' EXIT
+          curl -fsSLo "$tmp/$archive" "$base_url/$archive"
+          curl -fsSLo "$tmp/$checksums" "$base_url/$checksums"
+          expected=$(grep "  $archive\$" "$tmp/$checksums" | awk '{print $1}')
+          [ -n "$expected" ] || { echo "::warning::Missing Trivy checksum entry for $archive"; exit 1; }
+          actual=$(sha256sum "$tmp/$archive" | awk '{print $1}')
+          [ "$expected" = "$actual" ] || { echo "::error::Trivy checksum mismatch"; exit 1; }
+          mkdir -p "$trivy_dir"
+          tar -xzf "$tmp/$archive" -C "$trivy_dir" trivy
+          chmod +x "$trivy_dir/trivy"
+        fi
+        echo "TRIVY_BIN=$trivy_dir/trivy" >> "$GITHUB_ENV"
+
+    - name: Scan dependencies for CVEs
+      if: always() && env.TRIVY_BIN != ''
+      continue-on-error: true
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        set -euo pipefail
+        mkdir -p target/security
+        cache_dir="$RUNNER_TEMP/trivy-cache"
+        mkdir -p "$cache_dir"
+        if [ -f target/bom.json ]; then
+          "$TRIVY_BIN" sbom --cache-dir "$cache_dir" --no-progress --skip-version-check \
+            --format json --output target/security/trivy-sbom-cve.json target/bom.json || true
+        fi
+        "$TRIVY_BIN" fs --cache-dir "$cache_dir" --no-progress --skip-version-check \
+          --scanners vuln --exit-code 0 \
+          --format json --output target/security/trivy-fs-cve.json . || true
+
+    - name: Aggregate security, coverage, and test metrics
+      if: always()
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        REPO_NAME: ${{ inputs.repo-name }}
+        REVISION: ${{ inputs.revision }}
+        APPEND_SUMMARY: ${{ inputs.append-step-summary }}
+        SCRIPT_PATH: ${{ github.action_path }}/../../scripts/security_report.py
+      run: |
+        set -euo pipefail
+        repo="${REPO_NAME:-${GITHUB_REPOSITORY#*/}}"
+        args=(
+          python3 "$SCRIPT_PATH" repo
+          --root .
+          --repo "$repo"
+          --revision "$REVISION"
+          --json-out target/security/security-summary.json
+          --md-out target/security/security-summary.md
+        )
+        if [ -f target/security/trivy-sbom-cve.json ]; then
+          args+=(--trivy-json target/security/trivy-sbom-cve.json)
+        fi
+        if [ -f target/security/trivy-fs-cve.json ]; then
+          args+=(--trivy-json target/security/trivy-fs-cve.json)
+        fi
+        if [ "$APPEND_SUMMARY" = "true" ]; then
+          args+=(--append-step-summary)
+        fi
+        "${args[@]}"

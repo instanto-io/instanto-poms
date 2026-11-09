@@ -95,6 +95,10 @@ on:
         description: Verify registered downstream consumers after a successful default-branch deployment.
         type: boolean
         default: true
+      fast-deploy:
+        description: Skip tests, SpotBugs, JaCoCo, Javadoc, TeaCoCo, and Spotless for fast snapshot publication while keeping source jars attached.
+        type: boolean
+        default: false
       sonar:
         description: Run SonarQube analysis after verification when SONAR_TOKEN is present.
         type: boolean
@@ -262,22 +266,50 @@ jobs:
             # A dependency's own quality gates are its repository's business, and
             # running them here only slows this build down.
             "$MVN" -B -ntp --settings "$MAVEN_SETTINGS" -f "${dir}/${pom}" install \
-              -DskipTests -Dspotbugs.skip=true -Dspotless.check.skip=true -Dmaven.javadoc.skip=true
+              -DskipTests -Dspotbugs.skip=true -Djacoco.skip=true -Dteacoco.skip=true -Dspotless.skip=true -Dmaven.javadoc.skip=true
           done
 
       - name: ${{ inputs.name }}
+        env:
+          MVN_ARGS: ${{ inputs.maven-args }}
+          MVN_GOALS: ${{ inputs.goals }}
+          FAST_DEPLOY: ${{ inputs.fast-deploy }}
         run: |
           set -euo pipefail
           # --update-snapshots: a runner that once missed a snapshot would otherwise
           # keep failing for a day, because Maven caches the miss.
-          "$MVN" --settings "$MAVEN_SETTINGS" --batch-mode --no-transfer-progress --errors --fail-at-end \
-            --update-snapshots \
-            ${{ inputs.maven-args }} ${{ inputs.goals }}
+          python3 - <<'PYMVN'
+          import os, shlex, subprocess
+
+          args = shlex.split(os.environ.get("MVN_ARGS", ""))
+          goals = shlex.split(os.environ.get("MVN_GOALS", ""))
+          if os.environ.get("FAST_DEPLOY") == "true":
+              keys = {arg.split("=", 1)[0] for arg in args}
+              for flag in (
+                  "-DskipTests",
+                  "-Dspotbugs.skip=true",
+                  "-Djacoco.skip=true",
+                  "-Dmaven.javadoc.skip=true",
+                  "-Dteacoco.skip=true",
+                  "-Dspotless.skip=true",
+              ):
+                  if flag.split("=", 1)[0] not in keys:
+                      args.append(flag)
+          cmd = [
+              os.environ["MVN"],
+              "--settings", os.environ["MAVEN_SETTINGS"],
+              "--batch-mode", "--no-transfer-progress", "--errors", "--fail-at-end",
+              "--update-snapshots",
+              *args,
+              *goals,
+          ]
+          raise SystemExit(subprocess.run(cmd).returncode)
+          PYMVN
 
       # Coverage from another job, such as browser tests run separately, joins this
       # job's analysis. A missing artifact leaves that coverage out, not the build.
       - name: Download ${{ inputs.coverage-artifact }}
-        if: inputs.coverage-artifact != '' && inputs.sonar && env.SONAR_TOKEN != '' && !contains(inputs.goals, 'deploy')
+        if: inputs.coverage-artifact != '' && inputs.sonar && !inputs.fast-deploy && github.event_name != 'pull_request' && env.SONAR_TOKEN != '' && !contains(inputs.goals, 'deploy')
         continue-on-error: true
         uses: actions/download-artifact@v4
         with:
@@ -286,7 +318,7 @@ jobs:
 
       - name: SonarQube Quality Gate
         id: sonar-gate
-        if: inputs.sonar && env.SONAR_TOKEN != '' && !contains(inputs.goals, 'deploy')
+        if: inputs.sonar && !inputs.fast-deploy && github.event_name != 'pull_request' && env.SONAR_TOKEN != '' && !contains(inputs.goals, 'deploy')
         continue-on-error: ${{ inputs.sonar-quality-gate != 'blocking' }}
         run: |
           set -euo pipefail
@@ -355,7 +387,7 @@ jobs:
       # form. Publication-only runs skip it: the caller's verify job owns that
       # analysis, and two uploads with the same code-scanning category conflict.
       - name: Publish quality summary
-        if: always() && !contains(inputs.goals, 'deploy')
+        if: always() && !inputs.fast-deploy && !contains(inputs.goals, 'deploy')
         continue-on-error: true
         uses: instanto-io/instanto-poms/.github/actions/quality-summary@main
         with:
@@ -376,7 +408,7 @@ jobs:
   downstream:
     needs: build
     if: >-
-      inputs.downstream-checks && contains(inputs.goals, 'deploy') &&
+      inputs.downstream-checks && !inputs.fast-deploy && contains(inputs.goals, 'deploy') &&
       github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
       github.event_name != 'pull_request'
     uses: ./.github/workflows/downstream-build.yml

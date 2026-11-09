@@ -130,10 +130,13 @@ jobs:
     steps:
       - name: Allocate isolated compatibility workspace
         run: |
+          rm -rf -- plan-out state
           directory=$(mktemp -d "$RUNNER_TEMP/nightly-compat-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-XXXXXX")
+          mkdir -p "$directory/plan-out"
           echo "NIGHTLY_WORKSPACE=$directory/build" >> "$GITHUB_ENV"
+          echo "NIGHTLY_PLAN_DIR=$directory/plan-out" >> "$GITHUB_ENV"
           echo "PLAYWRIGHT_BROWSERS_PATH=$directory/build/browser-cache" >> "$GITHUB_ENV"
-          echo "OVERLAY_ARCHIVE=$RUNNER_TEMP/m2-overlay-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.tar.gz" >> "$GITHUB_ENV"
+          echo "OVERLAY_ARCHIVE=$directory/m2-overlay.tar.gz" >> "$GITHUB_ENV"
 
       - name: Check out shared CI tooling
         uses: actions/checkout@v7
@@ -156,7 +159,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: plan-artifacts
-          path: plan-out
+          path: ${{ env.NIGHTLY_PLAN_DIR }}
 
       - uses: actions/setup-java@v6
         with:
@@ -196,7 +199,7 @@ jobs:
           fi
           python3 tooling/.github/scripts/nightly.py compat \
             --catalog tooling/.github/downstream-projects.json \
-            --plan plan-out/plan.json \
+            --plan "$NIGHTLY_PLAN_DIR/plan.json" \
             --baseline state/baseline.json \
             --workspace "$NIGHTLY_WORKSPACE" \
             --overlay-out "$OVERLAY_ARCHIVE"
@@ -252,12 +255,15 @@ jobs:
     steps:
       - name: Allocate isolated verification workspace
         run: |
+          rm -rf -- stage3-out overlay
           directory=$(mktemp -d "$RUNNER_TEMP/nightly-verify-${{ matrix.name }}-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-XXXXXX")
-          mkdir -p "$directory/m2" "$directory/logs" "stage3-out"
+          mkdir -p "$directory/m2" "$directory/logs" "$directory/overlay" "$directory/out"
           echo "VERIFY_WORKSPACE=$directory" >> "$GITHUB_ENV"
           echo "VERIFY_M2=$directory/m2" >> "$GITHUB_ENV"
           echo "VERIFY_SETTINGS=$directory/settings.xml" >> "$GITHUB_ENV"
           echo "VERIFY_LOGS=$directory/logs" >> "$GITHUB_ENV"
+          echo "VERIFY_OVERLAY=$directory/overlay" >> "$GITHUB_ENV"
+          echo "VERIFY_OUT=$directory/out" >> "$GITHUB_ENV"
           echo "PLAYWRIGHT_BROWSERS_PATH=$directory/browsers" >> "$GITHUB_ENV"
 
       - name: Check out shared CI tooling
@@ -282,7 +288,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: m2-overlay
-          path: overlay
+          path: ${{ env.VERIFY_OVERLAY }}
 
       - uses: actions/setup-java@v6
         with:
@@ -324,7 +330,7 @@ jobs:
         run: |
           set -euo pipefail
           overlay_file=""
-          for candidate in overlay/*.tar.gz; do
+          for candidate in "$VERIFY_OVERLAY"/*.tar.gz; do
             if [ -f "$candidate" ]; then
               overlay_file="$candidate"
               break
@@ -377,12 +383,13 @@ jobs:
           VERIFY_OUTCOME: ${{ steps.verify.outcome }}
         run: |
           set -euo pipefail
-          mkdir -p stage3-out
-          python3 - <<'PYSTATUS'
+          out_dir="${VERIFY_OUT:-$RUNNER_TEMP/stage3-out-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT}"
+          mkdir -p "$out_dir"
+          OUT_DIR="$out_dir" python3 - <<'PYSTATUS'
           import json, os, pathlib, shutil
           project = os.environ["PROJECT_NAME"]
           status = "passed" if os.environ["VERIFY_OUTCOME"] == "success" else "failed"
-          out = pathlib.Path("stage3-out")
+          out = pathlib.Path(os.environ["OUT_DIR"])
           (out / f"{project}.status.json").write_text(
               json.dumps({"project": project, "sha": os.environ["PROJECT_SHA"], "status": status}, indent=2) + "\n",
               encoding="utf-8",
@@ -391,8 +398,8 @@ jobs:
           if summary_json.is_file():
               shutil.copy2(summary_json, out / f"{project}.security-summary.json")
           PYSTATUS
-          if [ -d "$VERIFY_LOGS" ]; then
-            cp -R "$VERIFY_LOGS"/. stage3-out/ || true
+          if [ -n "${VERIFY_LOGS:-}" ] && [ -d "$VERIFY_LOGS" ]; then
+            cp -R "$VERIFY_LOGS"/. "$out_dir"/ || true
           fi
 
       - name: Upload Stage 3 metrics and logs
@@ -400,7 +407,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nightly-metrics-${{ matrix.name }}
-          path: stage3-out
+          path: ${{ env.VERIFY_OUT }}
           if-no-files-found: ignore
           retention-days: 7
 

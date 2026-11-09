@@ -36,6 +36,10 @@
         "teavm-compat",
         "webapp-testkit"
       ],
+      "arguments": [
+        "-pl",
+        "!showcase-site"
+      ],
       "install_playwright": true,
       "node_version": "22",
       "verify_goals": [

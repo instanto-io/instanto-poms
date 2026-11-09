@@ -282,6 +282,12 @@ jobs:
           import os, shlex, subprocess
 
           args = shlex.split(os.environ.get("MVN_ARGS", ""))
+          runner_temp = os.environ.get("RUNNER_TEMP", "")
+          if runner_temp:
+              args = [
+                  arg.replace("${RUNNER_TEMP}", runner_temp).replace("$RUNNER_TEMP", runner_temp)
+                  for arg in args
+              ]
           goals = shlex.split(os.environ.get("MVN_GOALS", ""))
           if os.environ.get("FAST_DEPLOY") == "true":
               keys = {arg.split("=", 1)[0] for arg in args}
@@ -393,9 +399,8 @@ jobs:
         with:
           sonar-project-key: ${{ github.event.repository.name }}
           sonar-token: ${{ secrets.SONAR_READ_TOKEN || secrets.SONAR_TOKEN }}
-          # A caller must grant security-events: write before a reusable
-          # workflow may upload SARIF. Keep the shared summary permission-free;
-          # repositories with their own verify job own the code-scanning upload.
+          # Code scanning SARIF upload is disabled; SpotBugs and CVE results
+          # render in the workflow summary and nightly security dashboard.
           upload-sarif: 'false'
 
       - name: Remove the job-local Playwright browser cache

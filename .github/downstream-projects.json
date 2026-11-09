@@ -152,7 +152,7 @@
         [
           "test",
           "-pl",
-          ":sarto-graphics-viewport,:sarto-graphics-composition-test",
+          ":sarto-graphics-composition-test",
           "-am",
           "-Pteavm-tests"
         ]

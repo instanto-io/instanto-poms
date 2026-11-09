@@ -41,12 +41,19 @@ def run_command_logged(command, cwd, log, env=None):
         return process.wait() == 0
 
 
-def _placeholders(checkout_dir, repository, settings, runner_temp=None):
+def _placeholders(checkout_dir, repository, settings, runner_temp=None, central_settings=None):
     resolved_checkout = Path(checkout_dir).resolve()
     resolved_repo = Path(repository).resolve()
+    resolved_settings = Path(settings).resolve()
+    resolved_central = (
+        Path(central_settings).resolve()
+        if central_settings is not None
+        else resolved_settings.with_name("central-settings.xml")
+    )
     return {
         "checkout": str(resolved_checkout),
-        "settings": str(Path(settings).resolve()),
+        "settings": str(resolved_settings),
+        "central_settings": str(resolved_central),
         "m2": str(resolved_repo),
         "mvn": downstream.resolve_maven_executable(resolved_checkout),
         "runner_temp": runner_temp or os.environ.get("RUNNER_TEMP", str(resolved_repo.parent)),
@@ -640,6 +647,8 @@ def cmd_compat(args):
     settings = args.settings.resolve() if args.settings else workspace / "settings.xml"
     if args.settings is None:
         downstream.write_settings(settings, sources.values())
+    central_settings = workspace / "central-settings.xml"
+    downstream.write_central_settings(central_settings)
 
     def build(name, phase):
         if name in checkout_failed:
@@ -650,6 +659,7 @@ def cmd_compat(args):
             repository,
             settings,
             runner_temp=os.environ.get("RUNNER_TEMP", str(workspace)),
+            central_settings=central_settings,
         )
         repo_env = downstream.expand_env(projects[name].get("env", {}), ph)
         # Fresh m2 fetches unchanged dependencies once from Forgejo; --no-snapshot-updates ensures
@@ -731,7 +741,9 @@ def cmd_compat(args):
             except (OSError, subprocess.SubprocessError):
                 return False
         probe_settings = probe_dir / "settings.xml"
+        probe_central_settings = probe_dir / "central-settings.xml"
         downstream.write_settings(probe_settings, probe_sources.values())
+        downstream.write_central_settings(probe_central_settings)
 
         def probe_build(member, phase):
             # Suspects above the failing target only need fast compilation+install; only target runs checks.
@@ -741,6 +753,7 @@ def cmd_compat(args):
                 probe_repo,
                 probe_settings,
                 runner_temp=os.environ.get("RUNNER_TEMP", str(probe_dir)),
+                central_settings=probe_central_settings,
             )
             repo_env = downstream.expand_env(projects[member].get("env", {}), ph)
             cmd_args = [
@@ -837,8 +850,16 @@ def run_verify_project(
         restored = apply_m2_overlay(overlay, repository)
         print(f"Restored {restored} snapshot entries from compatibility overlay")
 
+    central_settings = settings.with_name("central-settings.xml")
     downstream.write_settings(settings, [checkout_dir])
-    ph = _placeholders(checkout_dir, repository, settings, runner_temp=runner_temp)
+    downstream.write_central_settings(central_settings)
+    ph = _placeholders(
+        checkout_dir,
+        repository,
+        settings,
+        runner_temp=runner_temp,
+        central_settings=central_settings,
+    )
     repo_env = downstream.expand_env(cfg.get("env", {}), ph)
     verify_goals = downstream.expand_placeholders(cfg.get("verify_goals", ["clean", "verify"]), ph)
     base_args = [

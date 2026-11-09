@@ -31,11 +31,35 @@ def copy_file(source, target):
     temporary.replace(target)
 
 
+def normalize_remote_marker(text):
+    lines = []
+    for line in text.splitlines():
+        if line.startswith("#") or ">" not in line or "=" not in line:
+            lines.append(line)
+            continue
+        left, right = line.split("=", 1)
+        name, origin = left.rsplit(">", 1)
+        if origin in PUBLIC_REPOSITORIES:
+            lines.append(f"{name}>central={right}")
+        else:
+            lines.append(line)
+    if not lines:
+        return ""
+    return "\n".join(lines) + ("\n" if text.endswith("\n") or lines else "")
+
+
 def restore(cache, repository):
     count = 0
     for source in cache.rglob("*"):
         if source.is_file() and not source.is_symlink():
-            copy_file(source, repository / source.relative_to(cache))
+            target = repository / source.relative_to(cache)
+            if source.name == "_remote.repositories":
+                target.parent.mkdir(parents=True, exist_ok=True)
+                temporary = target.with_name(target.name + ".cache-tmp")
+                temporary.write_text(normalize_remote_marker(source.read_text()))
+                temporary.replace(target)
+            else:
+                copy_file(source, target)
             count += 1
     return count
 
@@ -56,7 +80,7 @@ def save(repository, cache):
                 entries = []
                 break
             if origin in PUBLIC_REPOSITORIES and Path(name).name == name:
-                entries.append((name, line))
+                entries.append((name, f"{name}>central="))
         if not entries:
             continue
         tracked = []

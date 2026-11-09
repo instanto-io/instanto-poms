@@ -174,10 +174,22 @@ class DownstreamTests(unittest.TestCase):
                 'MAVEN_DOWNLOAD_CACHE': str(cache_dir),
             }):
                 downstream.write_settings(path, [root])
+                central_path = root / 'central-settings.xml'
+                downstream.write_central_settings(central_path)
                 downstream.strip_remote_repositories(m2)
             contents = path.read_text()
+            self.assertIn('<id>central</id>', contents)
             self.assertIn('<mirrorOf>central</mirrorOf>', contents)
             self.assertIn('${env.MAVEN_CENTRAL_MIRROR_URL}', contents)
+            central_contents = central_path.read_text()
+            self.assertIn('<id>central</id>', central_contents)
+            self.assertIn('<mirrorOf>central</mirrorOf>', central_contents)
+            self.assertNotIn('forgejo-instanto', central_contents)
+            self.assertNotIn('<servers>', central_contents)
+            empty_central = root / 'empty-central-settings.xml'
+            with patch.dict('os.environ', {'MAVEN_CENTRAL_MIRROR_URL': ''}):
+                downstream.write_central_settings(empty_central)
+            self.assertNotIn('<mirrors>', empty_central.read_text())
             self.assertFalse((rel / '_remote.repositories').exists())
             self.assertTrue((cache_dir / 'central/org/example/dep/1.0/dep-1.0.jar').is_file())
 

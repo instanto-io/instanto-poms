@@ -228,7 +228,7 @@ def write_settings(path, sources):
     if os.environ.get("MAVEN_CENTRAL_MIRROR_URL", "").strip():
         mirrors = ET.SubElement(root, "mirrors")
         mirror = ET.SubElement(mirrors, "mirror")
-        ET.SubElement(mirror, "id").text = "instanto-central"
+        ET.SubElement(mirror, "id").text = "central"
         ET.SubElement(mirror, "mirrorOf").text = "central"
         ET.SubElement(mirror, "url").text = "${env.MAVEN_CENTRAL_MIRROR_URL}"
     profile = ET.SubElement(ET.SubElement(root, "profiles"), "profile")
@@ -240,6 +240,19 @@ def write_settings(path, sources):
         for kind, enabled in [("releases", "false"), ("snapshots", "true")]:
             ET.SubElement(ET.SubElement(repo, kind), "enabled").text = enabled
     ET.SubElement(ET.SubElement(root, "activeProfiles"), "activeProfile").text = "instanto-snapshots"
+    ET.ElementTree(root).write(path, encoding="unicode")
+    path.chmod(0o600)
+
+
+def write_central_settings(path):
+    """Write Central-only settings (no private registries), forwarding mirror when configured."""
+    root = ET.Element("settings")
+    if os.environ.get("MAVEN_CENTRAL_MIRROR_URL", "").strip():
+        mirrors = ET.SubElement(root, "mirrors")
+        mirror = ET.SubElement(mirrors, "mirror")
+        ET.SubElement(mirror, "id").text = "central"
+        ET.SubElement(mirror, "mirrorOf").text = "central"
+        ET.SubElement(mirror, "url").text = "${env.MAVEN_CENTRAL_MIRROR_URL}"
     ET.ElementTree(root).write(path, encoding="unicode")
     path.chmod(0o600)
 
@@ -402,6 +415,8 @@ def main():
     settings = args.settings.resolve() if args.settings else workspace / "settings.xml"
     if args.settings is None:
         write_settings(settings, sources.values())
+    central_settings = workspace / "central-settings.xml"
+    write_central_settings(central_settings)
 
     def build(name, phase):
         if name in checkout_failed:
@@ -410,6 +425,7 @@ def main():
         placeholders = {
             "checkout": str(sources[name].resolve()),
             "settings": str(settings),
+            "central_settings": str(central_settings),
             "m2": str(repository),
             "mvn": resolve_maven_executable(sources[name]),
             "runner_temp": os.environ.get("RUNNER_TEMP", str(workspace)),

@@ -34,6 +34,12 @@ class MavenCacheTests(unittest.TestCase):
             self.assertEqual(3, cache.save(source, saved))
             self.assertEqual(7, cache.restore(saved, next_job))
             self.assertEqual("download", (next_job / "org/example/release/1.0/release.jar").read_text())
+            self.assertEqual("release.jar>central=\n", (next_job / "org/example/mirror/1.0/_remote.repositories").read_text())
+            # Legacy runner caches that still store >instanto-central= must heal on restore.
+            (saved / "org/example/mirror/1.0/_remote.repositories").write_text("release.jar>instanto-central=\n")
+            healed = root / "healed"
+            cache.restore(saved, healed)
+            self.assertEqual("release.jar>central=\n", (healed / "org/example/mirror/1.0/_remote.repositories").read_text())
             self.assertFalse(list(next_job.rglob("*.lastUpdated")))
             for excluded in ("installed", "snapshot", "private"):
                 self.assertFalse((next_job / "org/example" / excluded).exists())

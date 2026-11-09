@@ -204,7 +204,7 @@ class NightlyTests(unittest.TestCase):
 
             cfg = {
                 "env": {"CUSTOM_FLAG": "from-repo", "CACHE_DIR": "{runner_temp}/cache"},
-                "arguments": ["-Droot={checkout}"],
+                "arguments": ["-Droot={checkout}", "-DcentralSettings={central_settings}"],
                 "verify_goals": ["clean", "install"],
                 "full_checks": [["-f", "sub/pom.xml", "verify"]],
                 "post_verify_commands": [
@@ -242,6 +242,8 @@ class NightlyTests(unittest.TestCase):
             self.assertTrue(ok)
             self.assertEqual(len(maven_calls), 2)
             self.assertIn(f"-Droot={checkout.resolve()}", maven_calls[0][0])
+            self.assertIn(f"-DcentralSettings={settings.resolve().with_name('central-settings.xml')}", maven_calls[0][0])
+            self.assertTrue(settings.resolve().with_name("central-settings.xml").is_file())
             self.assertEqual(maven_calls[0][1]["CUSTOM_FLAG"], "from-repo")
             self.assertEqual(maven_calls[0][1]["CACHE_DIR"], str(root / "rt" / "cache"))
             self.assertFalse(list(repo.rglob("_remote.repositories")))

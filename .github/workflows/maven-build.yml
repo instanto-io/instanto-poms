@@ -255,7 +255,7 @@ jobs:
             fi
             echo '</servers>'
             if [ -n "${MAVEN_CENTRAL_MIRROR_URL:-}" ]; then
-              echo '<mirrors><mirror><id>instanto-central</id><mirrorOf>central</mirrorOf><url>${env.MAVEN_CENTRAL_MIRROR_URL}</url></mirror></mirrors>'
+              echo '<mirrors><mirror><id>central</id><mirrorOf>central</mirrorOf><url>${env.MAVEN_CENTRAL_MIRROR_URL}</url></mirror></mirrors>'
             fi
             # The bootstrap repository: Maven looks for a parent before it reads the
             # parent's own repositories, so packages.instanto.io has to be known here.

@@ -51,7 +51,20 @@ runs:
         MVN_REPO_LOCAL: ${{ inputs.maven-repo-local }}
       run: |
         set -euo pipefail
-        args=(--batch-mode --no-transfer-progress -DskipTests -Dspotless.skip=true -Dspotbugs.skip=true -Dcyclonedx.skipAttach=true)
+        args=(
+          --batch-mode
+          --no-transfer-progress
+          -Daether.transport.http.connectTimeout=30000
+          -Daether.transport.http.requestTimeout=120000
+          -Daether.transport.http.retryHandler.count=8
+          -Daether.transport.http.retryHandler.interval=10000
+          -Daether.transport.http.retryHandler.serviceUnavailable=429,502,503,504
+          -Dmaven.artifact.threads=2
+          -DskipTests
+          -Dspotless.skip=true
+          -Dspotbugs.skip=true
+          -Dcyclonedx.skipAttach=true
+        )
         if [ -n "$MVN_SETTINGS" ]; then args+=(--settings "$MVN_SETTINGS"); fi
         if [ -n "$MVN_REPO_LOCAL" ]; then args+=(--no-snapshot-updates "-Dmaven.repo.local=$MVN_REPO_LOCAL"); fi
         "$MVN_BIN" "${args[@]}" org.cyclonedx:cyclonedx-maven-plugin:2.9.2:makeAggregateBom
@@ -77,8 +90,8 @@ runs:
           base_url="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}"
           tmp=$(mktemp -d "$RUNNER_TEMP/trivy-dl.XXXXXX")
           trap 'rm -rf "$tmp"' EXIT
-          curl -fsSLo "$tmp/$archive" "$base_url/$archive"
-          curl -fsSLo "$tmp/$checksums" "$base_url/$checksums"
+          curl -fsSL --retry 3 --retry-delay 5 -o "$tmp/$archive" "$base_url/$archive"
+          curl -fsSL --retry 3 --retry-delay 5 -o "$tmp/$checksums" "$base_url/$checksums"
           expected=$(grep "  $archive\$" "$tmp/$checksums" | awk '{print $1}')
           [ -n "$expected" ] || { echo "::warning::Missing Trivy checksum entry for $archive"; exit 1; }
           actual=$(sha256sum "$tmp/$archive" | awk '{print $1}')

@@ -170,11 +170,28 @@ def fast_skip_flags(existing=(), skip_jacoco=True):
     return [flag for flag in candidates if flag.split("=", 1)[0] not in existing_keys]
 
 
+def save_runner_download_cache(repository_root):
+    """Persist public Central releases into the runner download cache before stripping markers."""
+    cache_root = os.environ.get("MAVEN_DOWNLOAD_CACHE", "").strip()
+    if not cache_root:
+        return 0
+    cache_script = Path(__file__).resolve().parents[1] / "actions" / "maven-cache" / "cache.py"
+    if not cache_script.is_file():
+        return 0
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("instanto_maven_cache", cache_script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.save(Path(repository_root), Path(cache_root) / "central")
+
+
 def strip_remote_repositories(repository_root):
     """Clear remote resolver markers so exported local snapshots resolve cleanly across jobs."""
     root = Path(repository_root)
     if not root.exists():
         return
+    save_runner_download_cache(root)
     for pattern in ("_remote.repositories", "*.lastUpdated"):
         for marker in root.rglob(pattern):
             marker.unlink(missing_ok=True)
@@ -208,6 +225,12 @@ def write_settings(path, sources):
         for key, value in [("id", name), ("username", "${env." + username + "}"),
                            ("password", "${env." + password + "}")]:
             ET.SubElement(server, key).text = value
+    if os.environ.get("MAVEN_CENTRAL_MIRROR_URL", "").strip():
+        mirrors = ET.SubElement(root, "mirrors")
+        mirror = ET.SubElement(mirrors, "mirror")
+        ET.SubElement(mirror, "id").text = "instanto-central"
+        ET.SubElement(mirror, "mirrorOf").text = "central"
+        ET.SubElement(mirror, "url").text = "${env.MAVEN_CENTRAL_MIRROR_URL}"
     profile = ET.SubElement(ET.SubElement(root, "profiles"), "profile")
     ET.SubElement(profile, "id").text = "instanto-snapshots"
     for plural, singular in [("repositories", "repository"), ("pluginRepositories", "pluginRepository")]:
@@ -243,11 +266,27 @@ def expand_env(env_map, placeholders):
     }
 
 
+MAVEN_RESILIENCE_FLAGS = (
+    "-Daether.transport.http.connectTimeout=30000",
+    "-Daether.transport.http.requestTimeout=120000",
+    "-Daether.transport.http.retryHandler.count=8",
+    "-Daether.transport.http.retryHandler.interval=10000",
+    "-Daether.transport.http.retryHandler.serviceUnavailable=429,502,503,504",
+    "-Dmaven.artifact.threads=2",
+)
+
+
 def run_maven(source, arguments, repository, settings, log, env=None):
     executable = resolve_maven_executable(source)
+    existing_keys = {arg.split("=", 1)[0] for arg in arguments}
+    resilience = [
+        flag for flag in MAVEN_RESILIENCE_FLAGS if flag.split("=", 1)[0] not in existing_keys
+    ]
     command = [executable, "--batch-mode", "--no-transfer-progress", "--errors", "--fail-at-end",
                "--settings", str(settings), "-Dmaven.repo.local=" + str(repository),
-               "-Dmaven.top-level-basedir=" + str(source.resolve()), *arguments]
+               "-Dmaven.top-level-basedir=" + str(source.resolve()),
+               *resilience,
+               *arguments]
     merged_env = os.environ.copy()
     if env:
         merged_env.update(env)

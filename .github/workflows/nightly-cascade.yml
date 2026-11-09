@@ -126,6 +126,7 @@ jobs:
       FORGEJO_PACKAGE_TOKEN: ${{ secrets.FORGEJO_PACKAGE_TOKEN || secrets.FORGEJO_PACKAGES_TOKEN || secrets.FORGEJO_PACKAGE_READ_TOKEN }}
       ARTIFACTS_USERNAME: ${{ secrets.ARTIFACTS_USERNAME }}
       ARTIFACTS_TOKEN: ${{ secrets.ARTIFACTS_TOKEN }}
+      MAVEN_CENTRAL_MIRROR_URL: ${{ vars.MAVEN_CENTRAL_MIRROR_URL }}
     steps:
       - name: Allocate isolated compatibility workspace
         run: |
@@ -167,6 +168,12 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Restore runner-local Maven downloads
+        uses: instanto-io/instanto-poms/.github/actions/maven-cache@main
+        with:
+          mode: prepare
+          maven-args: -Dmaven.repo.local=${{ env.NIGHTLY_WORKSPACE }}/m2
+
       - name: Ensure Maven is installed
         run: |
           set -euo pipefail
@@ -174,7 +181,8 @@ jobs:
             maven_ver="3.9.16"
             maven_dir="$RUNNER_TEMP/nightly-maven-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
             mkdir -p "$maven_dir"
-            curl -fsSL "https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/${maven_ver}/apache-maven-${maven_ver}-bin.tar.gz" \
+            base="${MAVEN_CENTRAL_MIRROR_URL:-https://repo.maven.apache.org/maven2}"
+            curl -fsSL --retry 3 --retry-delay 5 "${base}/org/apache/maven/apache-maven/${maven_ver}/apache-maven-${maven_ver}-bin.tar.gz" \
               | tar -xz --strip-components=1 -C "$maven_dir"
             echo "$maven_dir/bin" >> "$GITHUB_PATH"
           fi
@@ -223,7 +231,7 @@ jobs:
     if: needs.plan.outputs.should_run == 'true' && needs.compat.result == 'success'
     strategy:
       fail-fast: false
-      max-parallel: 4
+      max-parallel: 2
       matrix:
         include: ${{ fromJSON(needs.plan.outputs.matrix_include) }}
     runs-on: ${{ matrix.runner_labels }}
@@ -240,6 +248,7 @@ jobs:
       SONAR_READ_TOKEN: ${{ secrets.SONAR_READ_TOKEN }}
       SONAR_HOST_URL: https://sonar.instanto.io
       SONAR_PROJECT_KEY: ${{ matrix.name }}
+      MAVEN_CENTRAL_MIRROR_URL: ${{ vars.MAVEN_CENTRAL_MIRROR_URL }}
     steps:
       - name: Allocate isolated verification workspace
         run: |
@@ -286,6 +295,12 @@ jobs:
         with:
           node-version: ${{ matrix.node_version }}
 
+      - name: Restore runner-local Maven downloads
+        uses: instanto-io/instanto-poms/.github/actions/maven-cache@main
+        with:
+          mode: prepare
+          maven-args: -Dmaven.repo.local=${{ env.VERIFY_M2 }}
+
       - name: Ensure Maven is installed and locate executable
         run: |
           set -euo pipefail
@@ -297,7 +312,8 @@ jobs:
             maven_ver="3.9.16"
             maven_dir="$RUNNER_TEMP/nightly-maven-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
             mkdir -p "$maven_dir"
-            curl -fsSL "https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/${maven_ver}/apache-maven-${maven_ver}-bin.tar.gz" \
+            base="${MAVEN_CENTRAL_MIRROR_URL:-https://repo.maven.apache.org/maven2}"
+            curl -fsSL --retry 3 --retry-delay 5 "${base}/org/apache/maven/apache-maven/${maven_ver}/apache-maven-${maven_ver}-bin.tar.gz" \
               | tar -xz --strip-components=1 -C "$maven_dir"
             echo "$maven_dir/bin" >> "$GITHUB_PATH"
             echo "VERIFY_MVN=$maven_dir/bin/mvn" >> "$GITHUB_ENV"
@@ -387,6 +403,13 @@ jobs:
           path: stage3-out
           if-no-files-found: ignore
           retention-days: 7
+
+      - name: Save runner-local Maven downloads
+        if: always()
+        uses: instanto-io/instanto-poms/.github/actions/maven-cache@main
+        with:
+          mode: save
+          maven-args: -Dmaven.repo.local=${{ env.VERIFY_M2 }}
 
       - name: Clean verification workspace
         if: always()

@@ -286,7 +286,14 @@ jobs:
             echo "Installing ${repo}/${pom}"
             # A dependency's own quality gates are its repository's business, and
             # running them here only slows this build down.
-            "$MVN" -B -ntp --settings "$MAVEN_SETTINGS" -f "${dir}/${pom}" install \
+            "$MVN" -B -ntp --settings "$MAVEN_SETTINGS" \
+              -Daether.transport.http.connectTimeout=30000 \
+              -Daether.transport.http.requestTimeout=120000 \
+              -Daether.transport.http.retryHandler.count=8 \
+              -Daether.transport.http.retryHandler.interval=10000 \
+              -Daether.transport.http.retryHandler.serviceUnavailable=429,502,503,504 \
+              -Dmaven.artifact.threads=2 \
+              -f "${dir}/${pom}" install \
               -DskipTests -Dspotbugs.skip=true -Djacoco.skip=true -Dteacoco.skip=true -Dspotless.skip=true -Dmaven.javadoc.skip=true
           done
 
@@ -309,9 +316,21 @@ jobs:
                   arg.replace("${RUNNER_TEMP}", runner_temp).replace("$RUNNER_TEMP", runner_temp)
                   for arg in args
               ]
+          keys = {arg.split("=", 1)[0] for arg in args}
+          resilience = [
+              flag
+              for flag in (
+                  "-Daether.transport.http.connectTimeout=30000",
+                  "-Daether.transport.http.requestTimeout=120000",
+                  "-Daether.transport.http.retryHandler.count=8",
+                  "-Daether.transport.http.retryHandler.interval=10000",
+                  "-Daether.transport.http.retryHandler.serviceUnavailable=429,502,503,504",
+                  "-Dmaven.artifact.threads=2",
+              )
+              if flag.split("=", 1)[0] not in keys
+          ]
           goals = shlex.split(os.environ.get("MVN_GOALS", ""))
           if os.environ.get("FAST_DEPLOY") == "true":
-              keys = {arg.split("=", 1)[0] for arg in args}
               for flag in (
                   "-DskipTests",
                   "-Dspotbugs.skip=true",
@@ -327,6 +346,7 @@ jobs:
               "--settings", os.environ["MAVEN_SETTINGS"],
               "--batch-mode", "--no-transfer-progress", "--errors", "--fail-at-end",
               "--update-snapshots",
+              *resilience,
               *args,
               *goals,
           ]
@@ -351,6 +371,12 @@ jobs:
           set -euo pipefail
           repo_name="${GITHUB_REPOSITORY#*/}"
           "$MVN" --settings "$MAVEN_SETTINGS" --batch-mode --no-transfer-progress \
+            -Daether.transport.http.connectTimeout=30000 \
+            -Daether.transport.http.requestTimeout=120000 \
+            -Daether.transport.http.retryHandler.count=8 \
+            -Daether.transport.http.retryHandler.interval=10000 \
+            -Daether.transport.http.retryHandler.serviceUnavailable=429,502,503,504 \
+            -Dmaven.artifact.threads=2 \
             sonar:sonar \
             -Dsonar.projectKey="$repo_name" \
             -Dsonar.projectName="$repo_name" \

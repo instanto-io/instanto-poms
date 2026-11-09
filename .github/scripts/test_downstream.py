@@ -52,9 +52,25 @@ class DownstreamTests(unittest.TestCase):
                     source, ['clean', 'install'], outer / 'm2', outer / 'settings.xml', outer / 'run.log'))
             args, kwargs = launch.call_args
             self.assertIn('-Dmaven.top-level-basedir=' + str(source.resolve()), args[0])
+            self.assertIn('-Daether.transport.http.retryHandler.serviceUnavailable=429,502,503,504', args[0])
+            self.assertIn('-Dmaven.artifact.threads=2', args[0])
             self.assertEqual(source, kwargs['cwd'])
             self.assertEqual(['clean', 'install'], args[0][-2:])
             self.assertNotIn('-DskipTests', args[0])
+
+    def test_run_maven_allows_overriding_resilience_flags(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp)
+            process = MagicMock()
+            process.stdout = iter([])
+            process.wait.return_value = 0
+            with patch.object(downstream.subprocess, 'Popen', return_value=process) as launch:
+                self.assertTrue(downstream.run_maven(
+                    source, ['-Dmaven.artifact.threads=4', 'verify'], source / 'm2', source / 's.xml', source / 'run.log'))
+            cmd = launch.call_args[0][0]
+            self.assertNotIn('-Dmaven.artifact.threads=2', cmd)
+            self.assertIn('-Dmaven.artifact.threads=4', cmd)
+            self.assertIn('-Daether.transport.http.retryHandler.count=8', cmd)
 
     def test_transitive_diamond_runs_once_and_before_consumers(self):
         projects = graph(root=[], left=['root'], right=['root'], leaf=['left', 'right'], unrelated=[])
@@ -134,13 +150,36 @@ class DownstreamTests(unittest.TestCase):
             root = Path(tmp)
             (root / 'pom.xml').write_text('<project><id>github-consumer</id></project>')
             path = root / 'settings.xml'
-            with patch.dict('os.environ', {'MAVEN_TOKEN': 'do-not-persist-this-token'}):
+            with patch.dict('os.environ', {'MAVEN_TOKEN': 'do-not-persist-this-token', 'MAVEN_CENTRAL_MIRROR_URL': ''}):
                 downstream.write_settings(path, [root])
             contents = path.read_text()
             self.assertIn('github-consumer', contents)
             self.assertIn('${env.MAVEN_TOKEN}', contents)
             self.assertNotIn('do-not-persist-this-token', contents)
+            self.assertNotIn('<mirrors>', contents)
             self.assertEqual(0o600, path.stat().st_mode & 0o777)
+
+    def test_settings_include_central_mirror_when_env_set_and_strip_preserves_cache(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / 'settings.xml'
+            m2 = root / 'm2'
+            cache_dir = root / 'runner-cache'
+            rel = m2 / 'org' / 'example' / 'dep' / '1.0'
+            rel.mkdir(parents=True)
+            (rel / '_remote.repositories').write_text('dep-1.0.jar>central=\n')
+            (rel / 'dep-1.0.jar').write_text('jar')
+            with patch.dict('os.environ', {
+                'MAVEN_CENTRAL_MIRROR_URL': 'https://maven-central.storage-download.googleapis.com/maven2',
+                'MAVEN_DOWNLOAD_CACHE': str(cache_dir),
+            }):
+                downstream.write_settings(path, [root])
+                downstream.strip_remote_repositories(m2)
+            contents = path.read_text()
+            self.assertIn('<mirrorOf>central</mirrorOf>', contents)
+            self.assertIn('${env.MAVEN_CENTRAL_MIRROR_URL}', contents)
+            self.assertFalse((rel / '_remote.repositories').exists())
+            self.assertTrue((cache_dir / 'central/org/example/dep/1.0/dep-1.0.jar').is_file())
 
     def test_checked_in_catalog_reaches_widgets_port_from_scene_and_graphics(self):
         projects = downstream.load_catalog(Path(__file__).parents[1] / 'downstream-projects.json')

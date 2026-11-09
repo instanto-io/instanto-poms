@@ -971,10 +971,9 @@
       "post_verify_commands": [
         {
           "cmd": [
-            "./gradlew",
-            "--no-daemon",
-            "check",
-            "publishToMavenLocal"
+            "bash",
+            "-ec",
+            "for attempt in 1 2 3 4; do if ./gradlew --no-daemon --version; then break; fi; [ \"$attempt\" -lt 4 ] || exit 1; rm -rf \"$GRADLE_USER_HOME/wrapper/dists\"; sleep 5; done; ./gradlew --no-daemon check publishToMavenLocal"
           ],
           "env": {
             "GRADLE_USER_HOME": "{runner_temp}/teacoco-gradle"

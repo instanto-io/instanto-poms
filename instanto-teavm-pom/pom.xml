@@ -293,6 +293,18 @@
               <version>${instanto-teavm.version}</version>
             </dependency>
           </dependencies>
+        </plugin>
+        <!-- The patches are used by the TeaVM compiler, not referenced from any class,
+             so bytecode analysis reports them as unused. This parent declares them,
+             so it also declares them used; a consumer's own ignore lists stay its own. -->
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId><artifactId>maven-dependency-plugin</artifactId><version>3.11.0</version>
+          <configuration>
+            <usedDependencies>
+              <usedDependency>io.instanto:instanto-teavm-core-patch</usedDependency>
+              <usedDependency>io.instanto:instanto-teavm-jso-patch</usedDependency>
+            </usedDependencies>
+          </configuration>
         </plugin></plugins></pluginManagement>
         <plugins>
           <plugin>

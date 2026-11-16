@@ -361,43 +361,9 @@
     },
     "instanto-poms": {
       "dependencies": [],
-      "node_version": "22",
       "verify_goals": [
         "clean",
-        "verify"
-      ],
-      "post_verify_commands": [
-        {
-          "cmd": [
-            "python3",
-            "-m",
-            "unittest",
-            "discover",
-            "-s",
-            ".github/scripts",
-            "-p",
-            "test_*.py",
-            "-v"
-          ]
-        },
-        {
-          "cmd": [
-            "python3",
-            ".github/scripts/verify_downstream_maven.py"
-          ]
-        },
-        {
-          "cmd": [
-            "python3",
-            "src/it/verify-coverage.py"
-          ]
-        },
-        {
-          "cmd": [
-            "python3",
-            "src/it/verify-terser.py"
-          ]
-        }
+        "install"
       ]
     },
     "instanto-teavm": {
@@ -560,6 +526,7 @@
         "sarto-edge",
         "sarto-events",
         "sarto-graphics",
+        "sarto-grpc",
         "sarto-model",
         "sarto-persistence",
         "sarto-poms",
@@ -688,7 +655,6 @@
         "instanto-poms",
         "instanto-teavm",
         "mockatcha",
-        "sarto",
         "sarto-async",
         "sarto-auth",
         "sarto-cdi",

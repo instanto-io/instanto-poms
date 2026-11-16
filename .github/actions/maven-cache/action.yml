@@ -14,4 +14,4 @@ runs:
       env:
         CACHE_MODE: ${{ inputs.mode }}
         CACHE_MAVEN_ARGS: ${{ inputs.maven-args }}
-      run: python3 "$GITHUB_ACTION_PATH/cache.py" "$CACHE_MODE" --maven-args="$CACHE_MAVEN_ARGS"
+      run: bash "$GITHUB_ACTION_PATH/cache.sh" "$CACHE_MODE" --maven-args="$CACHE_MAVEN_ARGS"

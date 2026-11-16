@@ -125,28 +125,31 @@ runs:
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       env:
+        MVN_BIN: ${{ inputs.maven-executable || 'mvn' }}
+        MVN_SETTINGS: ${{ inputs.maven-settings }}
+        MVN_REPO_LOCAL: ${{ inputs.maven-repo-local }}
         REPO_NAME: ${{ inputs.repo-name }}
         REVISION: ${{ inputs.revision }}
         APPEND_SUMMARY: ${{ inputs.append-step-summary }}
-        SCRIPT_PATH: ${{ github.action_path }}/../../scripts/security_report.py
       run: |
         set -euo pipefail
         repo="${REPO_NAME:-${GITHUB_REPOSITORY#*/}}"
-        args=(
-          python3 "$SCRIPT_PATH" repo
-          --root .
-          --repo "$repo"
-          --revision "$REVISION"
-          --json-out target/security/security-summary.json
-          --md-out target/security/security-summary.md
-        )
+        args=(--batch-mode --no-transfer-progress)
+        if [ -n "$MVN_SETTINGS" ]; then args+=(--settings "$MVN_SETTINGS"); fi
+        if [ -n "$MVN_REPO_LOCAL" ]; then args+=("-Dmaven.repo.local=$MVN_REPO_LOCAL"); fi
+        trivy_files=()
         if [ -f target/security/trivy-sbom-cve.json ]; then
-          args+=(--trivy-json target/security/trivy-sbom-cve.json)
+          trivy_files+=("target/security/trivy-sbom-cve.json")
         fi
         if [ -f target/security/trivy-fs-cve.json ]; then
-          args+=(--trivy-json target/security/trivy-fs-cve.json)
+          trivy_files+=("target/security/trivy-fs-cve.json")
         fi
-        if [ "$APPEND_SUMMARY" = "true" ]; then
-          args+=(--append-step-summary)
-        fi
-        "${args[@]}"
+        trivy_csv=$(IFS=,; echo "${trivy_files[*]:-}")
+        "$MVN_BIN" "${args[@]}" io.instanto:instanto-ci-maven-plugin:0.1.0-SNAPSHOT:security-report \
+          "-Dinstanto.ci.rootDir=." \
+          "-Dinstanto.ci.repo=$repo" \
+          "-Dinstanto.ci.revision=$REVISION" \
+          "-Dinstanto.ci.trivyFiles=$trivy_csv" \
+          "-Dinstanto.ci.jsonOut=target/security/security-summary.json" \
+          "-Dinstanto.ci.mdOut=target/security/security-summary.md" \
+          "-Dinstanto.ci.appendStepSummary=$APPEND_SUMMARY"

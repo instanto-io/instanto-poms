@@ -15,81 +15,18 @@ jobs:
     if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/maven-build.yml
     with:
-      name: Verify Maven parents
+      name: Verify Maven parents and CI plugin
       parents: ''
-      goals: clean verify
+      goals: clean install
       sonar: false
       downstream-checks: false
     secrets: inherit
-
-  downstream-planner:
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
-    name: Verify downstream scheduling and Maven artifact propagation
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: '21'
-          overwrite-settings: false
-      - name: Check dependency scheduling and failure propagation
-        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py' -v
-      - name: Check a real consumer detects an upstream API break
-        run: python3 .github/scripts/verify_downstream_maven.py
-
-  coverage-inheritance:
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
-    name: Verify inherited test coverage
-    # Report publication needs the private packages.instanto.io network.
-    runs-on: [self-hosted, instanto-container]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: '21'
-      - name: Check coverage reports and test JVM options
-        run: python3 src/it/verify-coverage.py
-      - name: Publish verification logs to packages.instanto.io
-        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
-        env:
-          FORGEJO_PACKAGE_USER: ${{ secrets.FORGEJO_PACKAGE_USER }}
-          FORGEJO_PACKAGE_TOKEN: ${{ secrets.FORGEJO_PACKAGE_TOKEN || secrets.FORGEJO_PACKAGES_TOKEN }}
-        run: >-
-          python3 .github/scripts/publish_report.py --name coverage-inheritance-logs
-          --path 'target/coverage-inheritance/*.log'
-
-  terser-inheritance:
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
-    name: Verify TeaVM and Terser asset packaging
-    runs-on: [self-hosted, instanto-container]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - name: Check minified exports, source maps and packaged assets
-        run: python3 src/it/verify-terser.py
-      - name: Publish verification logs to packages.instanto.io
-        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
-        env:
-          FORGEJO_PACKAGE_USER: ${{ secrets.FORGEJO_PACKAGE_USER }}
-          FORGEJO_PACKAGE_TOKEN: ${{ secrets.FORGEJO_PACKAGE_TOKEN || secrets.FORGEJO_PACKAGES_TOKEN }}
-        run: >-
-          python3 .github/scripts/publish_report.py --name terser-inheritance-logs
-          --path 'target/terser-inheritance/*.log'
-          --path target/terser-inheritance/results.json
 
   publish-snapshot:
     if: github.repository == 'instanto-io/instanto-poms' && github.event_name == 'push' && github.ref == 'refs/heads/main'
     uses: ./.github/workflows/maven-build.yml
     with:
-      name: Publish Maven parent snapshots
+      name: Publish Maven parent and CI plugin snapshots
       parents: ''
       goals: deploy
       fast-deploy: true

@@ -100,30 +100,25 @@ jobs:
             echo "$maven_dir/bin" >> "$GITHUB_PATH"
           fi
 
+      - name: Install CI tooling plugin
+        run: |
+          mvn --batch-mode --no-transfer-progress \
+            "-Dmaven.repo.local=$DOWNSTREAM_WORKSPACE/m2" \
+            -f tooling/pom.xml install \
+            -DskipTests -Dspotbugs.skip=true -Djacoco.skip=true -Dspotless.skip=true -Dmaven.javadoc.skip=true
+
       - name: Resolve the upstream checkout
         id: upstream
         env:
           REQUESTED_UPSTREAM: ${{ inputs.upstream }}
         run: |
-          python3 - <<'PY'
-          import os, pathlib, sys
-          sys.path.insert(0, 'tooling/.github/scripts')
-          from downstream import checkout, load_catalog
-          projects = load_catalog('tooling/.github/downstream-projects.json')
-          # A dispatch on a consuming repository still refers to that repository.
-          # Only this standalone workflow exposes REQUESTED_UPSTREAM.
-          name = os.environ['REQUESTED_UPSTREAM'] or os.environ['GITHUB_REPOSITORY'].split('/')[-1]
-          source = pathlib.Path('upstream').resolve()
-          if os.environ['REQUESTED_UPSTREAM']:
-              if name not in projects:
-                  raise SystemExit('Unknown upstream project: ' + name)
-              source = pathlib.Path('manual-upstream').resolve()
-              checkout(projects[name].get('repository', 'instanto-io/' + name), source)
-          elif name in projects and projects[name].get('repository', 'instanto-io/' + name) != os.environ['GITHUB_REPOSITORY']:
-              raise SystemExit('Calling repository does not match the catalog')
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
-              output.write(f'name={name}\nsource={source}\n')
-          PY
+          mvn --batch-mode --no-transfer-progress \
+            "-Dmaven.repo.local=$DOWNSTREAM_WORKSPACE/m2" \
+            io.instanto:instanto-ci-maven-plugin:0.1.0-SNAPSHOT:downstream \
+            -Dinstanto.ci.catalog=tooling/.github/downstream-projects.json \
+            "-Dinstanto.ci.upstream=$REQUESTED_UPSTREAM" \
+            -Dinstanto.ci.source=upstream \
+            -Dinstanto.ci.resolveOnly=true
 
       - name: Build transitive downstream consumers
         env:
@@ -132,13 +127,16 @@ jobs:
           REQUESTED_UPSTREAM: ${{ inputs.upstream }}
         run: |
           set -euo pipefail
-          extra_args=()
-          if [ -n "$REQUESTED_UPSTREAM" ]; then extra_args+=(--verify-upstream); fi
-          python3 tooling/.github/scripts/downstream.py \
-            --catalog tooling/.github/downstream-projects.json \
-            --upstream "$UPSTREAM_NAME" --source "$UPSTREAM_SOURCE" \
-            --workspace "$DOWNSTREAM_WORKSPACE" \
-            "${extra_args[@]}"
+          verify_upstream="false"
+          if [ -n "$REQUESTED_UPSTREAM" ]; then verify_upstream="true"; fi
+          mvn --batch-mode --no-transfer-progress \
+            "-Dmaven.repo.local=$DOWNSTREAM_WORKSPACE/m2" \
+            io.instanto:instanto-ci-maven-plugin:0.1.0-SNAPSHOT:downstream \
+            -Dinstanto.ci.catalog=tooling/.github/downstream-projects.json \
+            "-Dinstanto.ci.upstream=$UPSTREAM_NAME" \
+            "-Dinstanto.ci.source=$UPSTREAM_SOURCE" \
+            "-Dinstanto.ci.workspace=$DOWNSTREAM_WORKSPACE" \
+            "-Dinstanto.ci.verifyUpstream=$verify_upstream"
 
       - name: Publish downstream results and logs to packages.instanto.io
         if: always()
@@ -146,9 +144,11 @@ jobs:
           # Publication requires write access; never silently fall back to a read token.
           FORGEJO_PACKAGE_TOKEN: ${{ secrets.FORGEJO_PACKAGE_TOKEN || secrets.FORGEJO_PACKAGES_TOKEN }}
         run: >-
-          python3 tooling/.github/scripts/publish_report.py
-          --name downstream-compatibility
-          --path "$DOWNSTREAM_WORKSPACE/reports"
+          mvn --batch-mode --no-transfer-progress
+          "-Dmaven.repo.local=$DOWNSTREAM_WORKSPACE/m2"
+          io.instanto:instanto-ci-maven-plugin:0.1.0-SNAPSHOT:publish-report
+          -Dinstanto.ci.reportName=downstream-compatibility
+          "-Dinstanto.ci.reportPaths=$DOWNSTREAM_WORKSPACE/reports"
 
       - name: Remove the job-local checkout and Maven cache
         if: always() && env.DOWNSTREAM_WORKSPACE != ''

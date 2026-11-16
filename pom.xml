@@ -80,6 +80,7 @@
        anything tied to a particular toolchain lives in a module beside it. -->
   <modules>
     <module>instanto-teavm-pom</module>
+    <module>instanto-ci-maven-plugin</module>
   </modules>
 
   <!-- Snapshots are published to, and resolved from, packages.instanto.io. The id
@@ -137,6 +138,7 @@
     <maven-antrun-plugin.version>3.2.0</maven-antrun-plugin.version>
     <central-publishing-maven-plugin.version>0.11.0</central-publishing-maven-plugin.version>
     <sonar-maven-plugin.version>5.8.0.7211</sonar-maven-plugin.version>
+    <instanto-ci-maven-plugin.version>0.1.0-SNAPSHOT</instanto-ci-maven-plugin.version>
     <sonar.host.url>https://sonar.instanto.io</sonar.host.url>
     <jacoco.version>0.8.15</jacoco.version>
     <!--
@@ -344,6 +346,11 @@
           <groupId>org.sonarsource.scanner.maven</groupId>
           <artifactId>sonar-maven-plugin</artifactId>
           <version>${sonar-maven-plugin.version}</version>
+        </plugin>
+        <plugin>
+          <groupId>io.instanto</groupId>
+          <artifactId>instanto-ci-maven-plugin</artifactId>
+          <version>${instanto-ci-maven-plugin.version}</version>
         </plugin>
       </plugins>
     </pluginManagement>

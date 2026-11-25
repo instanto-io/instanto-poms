@@ -334,7 +334,7 @@
       "dependencies": [
         "instanto-poms",
         "instanto-teavm",
-        "sarto",
+        "sarto-framework",
         "sarto-async",
         "sarto-cdi",
         "sarto-codec",
@@ -491,7 +491,7 @@
         "bootstrap-widgets",
         "instanto-poms",
         "instanto-teavm",
-        "sarto",
+        "sarto-framework",
         "sarto-async",
         "sarto-auth",
         "sarto-cdi",
@@ -512,7 +512,7 @@
         "verrai"
       ]
     },
-    "sarto": {
+    "sarto-framework": {
       "dependencies": [
         "cucumber-tea",
         "instanto-poms",
@@ -550,10 +550,10 @@
         [
           "-Pteavm-browser-tests",
           "-pl",
-          ":sarto-invoke-teavm",
+          ":sarto-testing",
           "-am",
           "-DskipITs",
-          "-Dtest=io.instanto.sarto.invoke.teavm.**",
+          "-Dtest=io.instanto.sarto.testing.teavm.**",
           "-Dsurefire.failIfNoSpecifiedTests=false",
           "verify"
         ],
@@ -782,7 +782,7 @@
         "instanto-poms",
         "instanto-teavm",
         "mockatcha",
-        "sarto",
+        "sarto-framework",
         "sarto-auth",
         "sarto-cdi",
         "sarto-codec",
@@ -1096,7 +1096,7 @@
         "instanto-poms",
         "instanto-teavm",
         "mockatcha",
-        "sarto",
+        "sarto-framework",
         "sarto-async",
         "sarto-auth",
         "sarto-cdi",

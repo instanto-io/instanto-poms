@@ -1,6 +1,6 @@
 name: Nightly compatibility, verification, and security cascade
 
-# Reusable nightly orchestrator invoked ONLY from private instanto-io/sarto so
+# Reusable nightly orchestrator invoked ONLY from private instanto-io/sarto-framework so
 # private repository metadata, test logs, Sonar metrics, and CVE reports stay
 # isolated inside the private organisation run and nightly-state branch.
 

@@ -90,7 +90,7 @@ jobs:
       - name: Install CI tooling plugin
         run: |
           mvn --batch-mode --no-transfer-progress \
-            -f tooling/pom.xml install \
+            -f tooling/pom.xml -pl :instanto-ci-maven-plugin -am install \
             -DskipTests -Dspotbugs.skip=true -Djacoco.skip=true -Dspotless.skip=true -Dmaven.javadoc.skip=true
 
       - name: Compute incremental nightly build plan
@@ -204,7 +204,7 @@ jobs:
         run: |
           mvn --batch-mode --no-transfer-progress \
             "-Dmaven.repo.local=$NIGHTLY_WORKSPACE/m2" \
-            -f tooling/pom.xml install \
+            -f tooling/pom.xml -pl :instanto-ci-maven-plugin -am install \
             -DskipTests -Dspotbugs.skip=true -Djacoco.skip=true -Dspotless.skip=true -Dmaven.javadoc.skip=true
 
       - name: Build changed libraries and downstream consumers in isolated m2
@@ -348,7 +348,7 @@ jobs:
         run: |
           "$VERIFY_MVN" --batch-mode --no-transfer-progress \
             "-Dmaven.repo.local=$VERIFY_M2" \
-            -f tooling/pom.xml install \
+            -f tooling/pom.xml -pl :instanto-ci-maven-plugin -am install \
             -DskipTests -Dspotbugs.skip=true -Djacoco.skip=true -Dspotless.skip=true -Dmaven.javadoc.skip=true
 
       - name: Run full verification and coverage suite
@@ -475,7 +475,7 @@ jobs:
       - name: Install CI tooling plugin
         run: |
           mvn --batch-mode --no-transfer-progress \
-            -f tooling/pom.xml install \
+            -f tooling/pom.xml -pl :instanto-ci-maven-plugin -am install \
             -DskipTests -Dspotbugs.skip=true -Djacoco.skip=true -Dspotless.skip=true -Dmaven.javadoc.skip=true
 
       - name: Render unified Nightly Dashboard

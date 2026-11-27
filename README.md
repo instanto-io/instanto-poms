@@ -220,6 +220,13 @@ coverage and Terser verification logs use the same storage. These diagnostics no
 longer consume GitHub Actions artifact storage; the optional `artifact-name` output
 for workflows that exchange build outputs through GitHub remains unchanged.
 
+For TeaVM coverage, set `publish-coverage-file` to the XML file in the producer job.
+Pushes and manual runs publish it as a Forgejo generic package. Pull requests
+check that the report was generated. In the Sonar job, depend on the producer,
+pass its `coverage-report-url` output, and set `restore-coverage-file` to the XML
+path Sonar reads. The workflow restores the report after Maven verification,
+including when only the consumer job is rerun.
+
 Packages use `ci-<repository-owner>-<repository-name>-<report-name>` and version
 `<run-id>-<run-attempt>-<publication-id>`. Each upload gets a unique publication ID,
 so separate jobs in one run and later reruns preserve their own evidence. The publisher

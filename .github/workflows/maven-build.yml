@@ -91,6 +91,18 @@ on:
           report needs its module's target directory here.
         type: string
         default: .
+      publish-coverage-file:
+        description: Single XML report to publish to Forgejo after verification on pushes and manual runs.
+        type: string
+        default: ''
+      coverage-report-url:
+        description: Forgejo coverage-report-url output from this run's producer job.
+        type: string
+        default: ''
+      restore-coverage-file:
+        description: Restore the published XML here after clean verify and before Sonar analysis.
+        type: string
+        default: ''
       downstream-checks:
         description: Verify registered downstream consumers after a successful default-branch deployment.
         type: boolean
@@ -109,6 +121,10 @@ on:
           pass, so snapshots still publish; "blocking" fails the job.
         type: string
         default: advisory
+    outputs:
+      coverage-report-url:
+        description: Immutable Forgejo package URL for the published coverage report.
+        value: ${{ jobs.build.outputs.coverage-report-url }}
     secrets:
       PACKAGES_TOKEN:
         description: Token with read access to the organisation's private packages and repositories.
@@ -145,6 +161,8 @@ permissions:
 jobs:
   build:
     runs-on: ${{ fromJSON(inputs.runner-labels) }}
+    outputs:
+      coverage-report-url: ${{ steps.publish-coverage.outputs.report-url }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     env:
       MAVEN_TOKEN: ${{ secrets.PACKAGES_TOKEN || github.token }}
@@ -376,6 +394,30 @@ jobs:
           name: ${{ inputs.coverage-artifact }}
           path: ${{ inputs.coverage-artifact-path }}
 
+      - name: Restore coverage from Forgejo for SonarQube
+        if: inputs.restore-coverage-file != '' && inputs.sonar && !inputs.fast-deploy && github.event_name != 'pull_request' && env.SONAR_TOKEN != '' && !contains(inputs.goals, 'deploy')
+        shell: bash
+        env:
+          REPORT_URL: ${{ inputs.coverage-report-url }}
+          REPORT_FILE: ${{ inputs.restore-coverage-file }}
+          FORGEJO_PACKAGE_TOKEN: ${{ secrets.FORGEJO_PACKAGE_READ_TOKEN || secrets.FORGEJO_PACKAGE_TOKEN || secrets.FORGEJO_PACKAGES_TOKEN }}
+        run: |
+          set -euo pipefail
+          prefix="https://packages.instanto.io/api/packages/instanto-io/generic/ci-${GITHUB_REPOSITORY/\//-}-coverage/"
+          version_and_file=${REPORT_URL#"$prefix"}
+          if [[ "$REPORT_URL" != "$prefix"* || ! "$version_and_file" =~ ^${GITHUB_RUN_ID}-[0-9]+-[0-9a-f]{32}/coverage\.tar\.gz$ ]]; then
+            echo "::error::Expected a Forgejo coverage archive from the producer job in this run."
+            exit 1
+          fi
+          mkdir -p -- "$(dirname -- "$REPORT_FILE")"
+          temp_file=$(mktemp "${REPORT_FILE}.XXXXXX")
+          trap 'rm -f -- "$temp_file"' EXIT
+          curl --fail --silent --show-error --connect-timeout 15 --max-time 120 \
+            --user "${FORGEJO_PACKAGE_USER:?}:${FORGEJO_PACKAGE_TOKEN:?}" "$REPORT_URL" \
+            | tar -xzO -f - -- "$(basename -- "$REPORT_FILE")" > "$temp_file"
+          test -s "$temp_file"
+          mv -- "$temp_file" "$REPORT_FILE"
+
       - name: SonarQube Quality Gate
         id: sonar-gate
         if: inputs.sonar && !inputs.fast-deploy && github.event_name != 'pull_request' && env.SONAR_TOKEN != '' && !contains(inputs.goals, 'deploy')
@@ -406,6 +448,23 @@ jobs:
           fi
           "$MVN" --settings "$MAVEN_SETTINGS" --batch-mode --no-transfer-progress \
             io.instanto:instanto-ci-maven-plugin:0.1.0-SNAPSHOT:sonar-diagnose
+
+      - name: Check coverage report
+        if: inputs.publish-coverage-file != ''
+        env:
+          REPORT_FILE: ${{ inputs.publish-coverage-file }}
+        run: test -s "$REPORT_FILE"
+
+      - name: Publish coverage to Forgejo
+        id: publish-coverage
+        if: inputs.publish-coverage-file != '' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        env:
+          REPORT_FILE: ${{ inputs.publish-coverage-file }}
+          FORGEJO_PACKAGE_TOKEN: ${{ secrets.FORGEJO_PACKAGE_TOKEN || secrets.FORGEJO_PACKAGES_TOKEN }}
+        run: >-
+          "$MVN" --settings "$MAVEN_SETTINGS" --batch-mode --no-transfer-progress --update-snapshots -N
+          io.instanto:instanto-ci-maven-plugin:0.1.0-SNAPSHOT:publish-report
+          -Dinstanto.ci.name=coverage "-Dinstanto.ci.paths=$REPORT_FILE"
 
       - name: Upload ${{ inputs.artifact-name }}
         if: inputs.artifact-name != ''

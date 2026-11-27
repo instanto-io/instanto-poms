@@ -6,7 +6,9 @@
 package io.instanto.ci.maven;
 
 import java.io.File;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -95,6 +97,14 @@ public final class PublishReportMojo extends AbstractMojo {
               published.fileCount(),
               published.sha256());
       SonarQubeClient.appendStepSummary(summaryMd);
+      String output = System.getenv("GITHUB_OUTPUT");
+      if (output != null && !output.isBlank()) {
+        Files.writeString(
+            Path.of(output),
+            "report-url=" + published.url() + "\n",
+            StandardOpenOption.CREATE,
+            StandardOpenOption.APPEND);
+      }
     } catch (Exception e) {
       throw new MojoExecutionException(e.getMessage(), e);
     }

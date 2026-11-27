@@ -54,7 +54,7 @@ permissions:
 jobs:
   plan:
     name: Stage 1 - Plan changed upstreams and consumers
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, instanto-container]
     timeout-minutes: 15
     outputs:
       should_run: ${{ steps.plan.outputs.should_run }}
@@ -101,6 +101,7 @@ jobs:
           REQ_BOOTSTRAP: ${{ inputs.bootstrap_only }}
         run: |
           set -euo pipefail
+          rm -rf -- plan-out
           mkdir -p state plan-out
           if [ ! -f state/baseline.json ]; then
             echo '{"schema_version": 1, "updated_at": null, "projects": {}}' > state/baseline.json
@@ -116,11 +117,10 @@ jobs:
 
       - name: Upload plan artifacts
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: plan-artifacts
-          path: plan-out
-          retention-days: 7
+        env:
+          FORGEJO_PACKAGE_USER: ${{ secrets.FORGEJO_PACKAGE_USER }}
+          FORGEJO_PACKAGE_TOKEN: ${{ secrets.FORGEJO_PACKAGE_TOKEN || secrets.FORGEJO_PACKAGES_TOKEN }}
+        run: python3 tooling/.github/scripts/nightly_artifacts.py put plan-out --name plan-artifacts
 
   compat:
     name: Stage 2 - Compatibility cascade & blame isolation
@@ -166,10 +166,10 @@ jobs:
           persist-credentials: false
 
       - name: Download plan artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: plan-artifacts
-          path: ${{ env.NIGHTLY_PLAN_DIR }}
+        env:
+          FORGEJO_PACKAGE_USER: ${{ secrets.FORGEJO_PACKAGE_USER }}
+          FORGEJO_PACKAGE_TOKEN: ${{ secrets.FORGEJO_PACKAGE_READ_TOKEN || secrets.FORGEJO_PACKAGE_TOKEN || secrets.FORGEJO_PACKAGES_TOKEN }}
+        run: python3 tooling/.github/scripts/nightly_artifacts.py get "$NIGHTLY_PLAN_DIR" --name plan-artifacts
 
       - uses: actions/setup-java@v6
         with:
@@ -225,21 +225,17 @@ jobs:
 
       - name: Upload verified local snapshot m2 overlay
         if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: m2-overlay
-          path: ${{ env.OVERLAY_ARCHIVE }}
-          if-no-files-found: ignore
-          retention-days: 1
+        env:
+          FORGEJO_PACKAGE_USER: ${{ secrets.FORGEJO_PACKAGE_USER }}
+          FORGEJO_PACKAGE_TOKEN: ${{ secrets.FORGEJO_PACKAGE_TOKEN || secrets.FORGEJO_PACKAGES_TOKEN }}
+        run: python3 tooling/.github/scripts/nightly_artifacts.py put "$OVERLAY_ARCHIVE" --name m2-overlay --optional
 
       - name: Upload compatibility & blame reports
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: compat-reports
-          path: ${{ env.NIGHTLY_WORKSPACE }}/reports
-          if-no-files-found: ignore
-          retention-days: 7
+        env:
+          FORGEJO_PACKAGE_USER: ${{ secrets.FORGEJO_PACKAGE_USER }}
+          FORGEJO_PACKAGE_TOKEN: ${{ secrets.FORGEJO_PACKAGE_TOKEN || secrets.FORGEJO_PACKAGES_TOKEN }}
+        run: python3 tooling/.github/scripts/nightly_artifacts.py put "$NIGHTLY_WORKSPACE/reports" --name compat-reports --optional
 
       - name: Clean compatibility workspace and overlay archive
         if: always()
@@ -304,10 +300,10 @@ jobs:
           persist-credentials: false
 
       - name: Download verified m2 snapshot overlay
-        uses: actions/download-artifact@v4
-        with:
-          name: m2-overlay
-          path: ${{ env.VERIFY_OVERLAY }}
+        env:
+          FORGEJO_PACKAGE_USER: ${{ secrets.FORGEJO_PACKAGE_USER }}
+          FORGEJO_PACKAGE_TOKEN: ${{ secrets.FORGEJO_PACKAGE_READ_TOKEN || secrets.FORGEJO_PACKAGE_TOKEN || secrets.FORGEJO_PACKAGES_TOKEN }}
+        run: python3 tooling/.github/scripts/nightly_artifacts.py get "$VERIFY_OVERLAY" --name m2-overlay
 
       - uses: actions/setup-java@v6
         with:
@@ -425,12 +421,11 @@ jobs:
 
       - name: Upload Stage 3 metrics and logs
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: nightly-metrics-${{ matrix.name }}
-          path: ${{ env.VERIFY_OUT }}
-          if-no-files-found: ignore
-          retention-days: 7
+        env:
+          FORGEJO_PACKAGE_USER: ${{ secrets.FORGEJO_PACKAGE_USER }}
+          FORGEJO_PACKAGE_TOKEN: ${{ secrets.FORGEJO_PACKAGE_TOKEN || secrets.FORGEJO_PACKAGES_TOKEN }}
+          PROJECT_NAME: ${{ matrix.name }}
+        run: python3 tooling/.github/scripts/nightly_artifacts.py put "$VERIFY_OUT" --name "nightly-metrics-$PROJECT_NAME" --optional
 
       - name: Save runner-local Maven downloads
         if: always()
@@ -449,7 +444,7 @@ jobs:
     name: Stage 4 - Dashboard & Baseline State
     needs: [plan, compat, verify-and-security]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, instanto-container]
     timeout-minutes: 15
     steps:
       - name: Check out shared CI tooling
@@ -461,10 +456,12 @@ jobs:
           persist-credentials: false
 
       - name: Download nightly run artifacts
-        continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
+        env:
+          FORGEJO_PACKAGE_USER: ${{ secrets.FORGEJO_PACKAGE_USER }}
+          FORGEJO_PACKAGE_TOKEN: ${{ secrets.FORGEJO_PACKAGE_READ_TOKEN || secrets.FORGEJO_PACKAGE_TOKEN || secrets.FORGEJO_PACKAGES_TOKEN }}
+        run: |
+          rm -rf -- artifacts
+          python3 tooling/.github/scripts/nightly_artifacts.py collect artifacts
 
       - uses: actions/setup-java@v6
         with:
@@ -586,3 +583,11 @@ jobs:
         run: |
           echo "::error::Nightly cascade failed (plan=${{ needs.plan.result }}, compat=${{ needs.compat.result }}, verify-and-security=${{ needs.verify-and-security.result }})."
           exit 1
+
+
+      - name: Expire earlier nightly overlays and reports
+        if: always() && !cancelled()
+        env:
+          FORGEJO_PACKAGE_USER: ${{ secrets.FORGEJO_PACKAGE_USER }}
+          FORGEJO_PACKAGE_TOKEN: ${{ secrets.FORGEJO_PACKAGE_TOKEN || secrets.FORGEJO_PACKAGES_TOKEN }}
+        run: python3 tooling/.github/scripts/nightly_artifacts.py expire

@@ -132,6 +132,9 @@
     <versions-maven-plugin.version>2.19.1</versions-maven-plugin.version>
     <maven-enforcer-plugin.version>3.6.3</maven-enforcer-plugin.version>
     <maven-gpg-plugin.version>3.2.8</maven-gpg-plugin.version>
+    <maven-checkstyle-plugin.version>3.6.0</maven-checkstyle-plugin.version>
+    <checkstyle.version>14.1.0</checkstyle.version>
+    <sonar.java.checkstyle.reportPaths>${project.build.directory}/checkstyle-result.xml</sonar.java.checkstyle.reportPaths>
     <spotless.version>2.43.0</spotless.version>
     <google-java-format.version>1.35.0</google-java-format.version>
     <spotbugs-maven-plugin.version>4.10.3.0</spotbugs-maven-plugin.version>
@@ -257,6 +260,46 @@
           <configuration><bestPractices>true</bestPractices></configuration>
         </plugin>
         <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-checkstyle-plugin</artifactId>
+          <version>${maven-checkstyle-plugin.version}</version>
+          <dependencies>
+            <dependency>
+              <groupId>com.puppycrawl.tools</groupId>
+              <artifactId>checkstyle</artifactId>
+              <version>${checkstyle.version}</version>
+            </dependency>
+          </dependencies>
+          <executions>
+            <execution>
+              <id>qualified-types</id>
+              <phase>process-sources</phase>
+              <goals><goal>check</goal></goals>
+            </execution>
+          </executions>
+          <configuration>
+            <checkstyleRules>
+              <module name="Checker">
+                <module name="TreeWalker">
+                  <module name="UnnecessaryFullyQualifiedType"/>
+                </module>
+              </module>
+            </checkstyleRules>
+            <sourceDirectories>
+              <sourceDirectory>${project.build.sourceDirectory}</sourceDirectory>
+              <sourceDirectory>${project.basedir}/src/jre/java</sourceDirectory>
+              <sourceDirectory>${project.basedir}/src/teavm/java</sourceDirectory>
+            </sourceDirectories>
+            <includeTestSourceDirectory>true</includeTestSourceDirectory>
+            <excludeGeneratedSources>true</excludeGeneratedSources>
+            <excludes>**/generated/**,**/generated-sources/**,**/vendor/**,**/upstream/**</excludes>
+            <logViolationsToConsole>false</logViolationsToConsole>
+            <includeResources>false</includeResources>
+            <includeTestResources>false</includeTestResources>
+            <failOnViolation>false</failOnViolation>
+          </configuration>
+        </plugin>
+        <plugin>
           <groupId>com.diffplug.spotless</groupId>
           <artifactId>spotless-maven-plugin</artifactId>
           <version>${spotless.version}</version>
@@ -362,6 +405,10 @@
       <plugin>
         <groupId>org.jacoco</groupId>
         <artifactId>jacoco-maven-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-checkstyle-plugin</artifactId>
       </plugin>
       <plugin>
         <groupId>com.diffplug.spotless</groupId>

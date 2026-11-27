@@ -48,17 +48,14 @@ class DownstreamAndNightlyTest {
   void loadsRealCatalogComputesAffectedClosureAndTarjanGroups() throws Exception {
     DownstreamOrchestrator orchestrator = new DownstreamOrchestrator();
     Path catalogPath =
-        Path.of(
-            "/Users/carls/IdeaProjects/io.instanto/instanto-poms/.github/downstream-projects.json");
-    if (Files.isRegularFile(catalogPath)) {
-      Map<String, ProjectConfig> realProjects = orchestrator.loadCatalog(catalogPath);
-      assertTrue(realProjects.containsKey("instanto-poms"));
-      assertTrue(realProjects.containsKey("sarto"));
-      Set<String> affected = DownstreamOrchestrator.affectedProjects(realProjects, "instanto-poms");
-      assertTrue(affected.contains("sarto"));
-      List<List<String>> groups = DownstreamOrchestrator.buildGroups(realProjects, affected);
-      assertFalse(groups.isEmpty());
-    }
+        Path.of(System.getProperty("basedir", "."), "..", ".github", "downstream-projects.json");
+    Map<String, ProjectConfig> realProjects = orchestrator.loadCatalog(catalogPath);
+    assertTrue(realProjects.containsKey("instanto-poms"));
+    assertTrue(realProjects.containsKey("sarto-framework"));
+    Set<String> affected = DownstreamOrchestrator.affectedProjects(realProjects, "instanto-poms");
+    assertTrue(affected.contains("sarto-framework"));
+    List<List<String>> catalogGroups = DownstreamOrchestrator.buildGroups(realProjects, affected);
+    assertFalse(catalogGroups.isEmpty());
 
     Map<String, ProjectConfig> sample = new LinkedHashMap<>();
     sample.put("root", project("instanto-io/root", List.of()));

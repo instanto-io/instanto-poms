@@ -273,6 +273,17 @@ python3 .github/scripts/verify_downstream_maven.py
 The Maven fixture installs a working upstream snapshot, verifies a consumer, then
 removes the upstream method and proves that the same consumer fails compilation.
 
+### Java import readability
+
+The organisation parent runs Checkstyle during `process-sources`. Its
+`UnnecessaryFullyQualifiedType` rule flags inline package-qualified types
+that can be imported, while allowing qualifications needed to distinguish
+types with the same name. It checks main, JVM, TeaVM and test sources.
+Findings are advisory. Each module writes `target/checkstyle-result.xml`,
+which the inherited `sonar.java.checkstyle.reportPaths` property passes to
+SonarQube's Java Checkstyle importer. The check runs locally with
+`mvn process-sources` on JDK 21.
+
 ### SonarQube diagnostics
 
 Test support code is excluded from coverage by default: modules whose directory name

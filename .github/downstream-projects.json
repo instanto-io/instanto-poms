@@ -600,18 +600,12 @@
       ]
     },
     "sarto-async": {
-      "arguments": [
-        "-Dmaven.javadoc.skip=false"
-      ],
       "dependencies": [
         "instanto-poms",
         "sarto-events"
       ]
     },
     "sarto-auth": {
-      "arguments": [
-        "-Dmaven.javadoc.skip=false"
-      ],
       "dependencies": [
         "mockatcha",
         "sarto-async",
@@ -628,9 +622,6 @@
       ]
     },
     "sarto-cdi": {
-      "arguments": [
-        "-Dmaven.javadoc.skip=false"
-      ],
       "dependencies": [
         "instanto-poms",
         "mockatcha",
@@ -826,9 +817,6 @@
       ]
     },
     "sarto-rest": {
-      "arguments": [
-        "-Dmaven.javadoc.skip=false"
-      ],
       "dependencies": [
         "mockatcha",
         "sarto-async",
@@ -889,9 +877,6 @@
       ]
     },
     "sarto-transactions": {
-      "arguments": [
-        "-Dmaven.javadoc.skip=false"
-      ],
       "dependencies": [
         "instanto-poms",
         "mockatcha",

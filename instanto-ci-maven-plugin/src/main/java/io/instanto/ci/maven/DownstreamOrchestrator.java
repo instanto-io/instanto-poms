@@ -398,7 +398,6 @@ public final class DownstreamOrchestrator {
     }
     List<String> candidates = new ArrayList<>();
     candidates.add("-Dspotbugs.skip=true");
-    candidates.add("-Dmaven.javadoc.skip=true");
     candidates.add("-Dspotless.skip=true");
     if (skipJacoco) {
       candidates.add("-Djacoco.skip=true");

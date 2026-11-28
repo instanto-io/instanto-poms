@@ -45,6 +45,13 @@ class DownstreamAndNightlyTest {
   }
 
   @Test
+  void fastCompatibilityBuildsPreserveProjectJavadocSettings() {
+    List<String> flags = DownstreamOrchestrator.fastSkipFlags(List.of("clean", "install"), true);
+    assertTrue(flags.contains("-Dspotbugs.skip=true"));
+    assertFalse(flags.stream().anyMatch(flag -> flag.startsWith("-Dmaven.javadoc.skip")));
+  }
+
+  @Test
   void loadsRealCatalogComputesAffectedClosureAndTarjanGroups() throws Exception {
     DownstreamOrchestrator orchestrator = new DownstreamOrchestrator();
     Path catalogPath =

@@ -487,6 +487,9 @@
     },
     "ports": {
       "repository": "cstainton/ports",
+      "env": {
+        "MAVEN_OPTS": "-Xmx2g"
+      },
       "dependencies": [
         "bootstrap-widgets",
         "instanto-poms",

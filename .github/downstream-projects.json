@@ -600,6 +600,9 @@
       ]
     },
     "sarto-async": {
+      "arguments": [
+        "-Dmaven.javadoc.skip=false"
+      ],
       "dependencies": [
         "instanto-poms",
         "sarto-events"
@@ -622,6 +625,9 @@
       ]
     },
     "sarto-cdi": {
+      "arguments": [
+        "-Dmaven.javadoc.skip=false"
+      ],
       "dependencies": [
         "instanto-poms",
         "mockatcha",

@@ -107,10 +107,11 @@ jobs:
             echo '{"schema_version": 1, "updated_at": null, "projects": {}}' > state/baseline.json
           fi
           mvn --batch-mode --no-transfer-progress \
+            -N -f tooling/pom.xml \
             io.instanto:instanto-ci-maven-plugin:0.1.0-SNAPSHOT:nightly-plan \
-            -Dinstanto.ci.catalog=tooling/.github/downstream-projects.json \
-            -Dinstanto.ci.baseline=state/baseline.json \
-            -Dinstanto.ci.outputDir=plan-out \
+            "-Dinstanto.ci.catalog=$GITHUB_WORKSPACE/tooling/.github/downstream-projects.json" \
+            "-Dinstanto.ci.baseline=$GITHUB_WORKSPACE/state/baseline.json" \
+            "-Dinstanto.ci.outputDir=$GITHUB_WORKSPACE/plan-out" \
             "-Dinstanto.ci.upstream=${REQ_UPSTREAM}" \
             "-Dinstanto.ci.force=${REQ_FORCE}" \
             "-Dinstanto.ci.bootstrapOnly=${REQ_BOOTSTRAP}"
@@ -216,10 +217,11 @@ jobs:
           fi
           mvn --batch-mode --no-transfer-progress \
             "-Dmaven.repo.local=$NIGHTLY_WORKSPACE/m2" \
+            -N -f tooling/pom.xml \
             io.instanto:instanto-ci-maven-plugin:0.1.0-SNAPSHOT:nightly-compat \
-            -Dinstanto.ci.catalog=tooling/.github/downstream-projects.json \
+            "-Dinstanto.ci.catalog=$GITHUB_WORKSPACE/tooling/.github/downstream-projects.json" \
             "-Dinstanto.ci.plan=$NIGHTLY_PLAN_DIR/plan.json" \
-            -Dinstanto.ci.baseline=state/baseline.json \
+            "-Dinstanto.ci.baseline=$GITHUB_WORKSPACE/state/baseline.json" \
             "-Dinstanto.ci.workspace=$NIGHTLY_WORKSPACE" \
             "-Dinstanto.ci.overlayOut=$OVERLAY_ARCHIVE"
 
@@ -360,10 +362,11 @@ jobs:
           done
           "$VERIFY_MVN" --batch-mode --no-transfer-progress \
             "-Dmaven.repo.local=$VERIFY_M2" \
+            -N -f tooling/pom.xml \
             io.instanto:instanto-ci-maven-plugin:0.1.0-SNAPSHOT:nightly-verify \
-            -Dinstanto.ci.catalog=tooling/.github/downstream-projects.json \
+            "-Dinstanto.ci.catalog=$GITHUB_WORKSPACE/tooling/.github/downstream-projects.json" \
             "-Dinstanto.ci.project=${{ matrix.name }}" \
-            -Dinstanto.ci.checkout=target-repo \
+            "-Dinstanto.ci.checkout=$GITHUB_WORKSPACE/target-repo" \
             "-Dinstanto.ci.repository=$VERIFY_M2" \
             "-Dinstanto.ci.settings=$VERIFY_SETTINGS" \
             "-Dinstanto.ci.logDir=$VERIFY_LOGS" \
@@ -375,10 +378,11 @@ jobs:
         run: |
           "$VERIFY_MVN" --batch-mode --no-transfer-progress \
             "-Dmaven.repo.local=$VERIFY_M2" \
+            -N -f tooling/pom.xml \
             io.instanto:instanto-ci-maven-plugin:0.1.0-SNAPSHOT:nightly-sonar \
-            -Dinstanto.ci.catalog=tooling/.github/downstream-projects.json \
+            "-Dinstanto.ci.catalog=$GITHUB_WORKSPACE/tooling/.github/downstream-projects.json" \
             "-Dinstanto.ci.project=${{ matrix.name }}" \
-            -Dinstanto.ci.checkout=target-repo \
+            "-Dinstanto.ci.checkout=$GITHUB_WORKSPACE/target-repo" \
             "-Dinstanto.ci.repository=$VERIFY_M2" \
             "-Dinstanto.ci.settings=$VERIFY_SETTINGS" \
             "-Dinstanto.ci.logDir=$VERIFY_LOGS"
@@ -487,12 +491,13 @@ jobs:
           if [ "$mode" = "run" ]; then
             compat_args=()
             if [ -f "artifacts/compat-reports/compat-summary.md" ]; then
-              compat_args+=("-Dinstanto.ci.compatSummary=artifacts/compat-reports/compat-summary.md")
+              compat_args+=("-Dinstanto.ci.compatSummary=$GITHUB_WORKSPACE/artifacts/compat-reports/compat-summary.md")
             fi
             mvn --batch-mode --no-transfer-progress \
+              -N -f tooling/pom.xml \
               io.instanto:instanto-ci-maven-plugin:0.1.0-SNAPSHOT:security-dashboard \
-              -Dinstanto.ci.artifactsDir=artifacts \
-              -Dinstanto.ci.mdOut=nightly-dashboard.md \
+              "-Dinstanto.ci.artifactsDir=$GITHUB_WORKSPACE/artifacts" \
+              "-Dinstanto.ci.mdOut=$GITHUB_WORKSPACE/nightly-dashboard.md" \
               -Dinstanto.ci.appendStepSummary=true \
               ${compat_args[@]+"${compat_args[@]}"}
           fi
@@ -537,15 +542,16 @@ jobs:
             fi
             compat_args=()
             if [ -f "artifacts/compat-reports/compat-results.json" ]; then
-              compat_args+=("-Dinstanto.ci.compatResults=artifacts/compat-reports/compat-results.json")
+              compat_args+=("-Dinstanto.ci.compatResults=$GITHUB_WORKSPACE/artifacts/compat-reports/compat-results.json")
             fi
             mvn --batch-mode --no-transfer-progress \
+              -N -f tooling/pom.xml \
               io.instanto:instanto-ci-maven-plugin:0.1.0-SNAPSHOT:nightly-update-baseline \
-              -Dinstanto.ci.catalog=tooling/.github/downstream-projects.json \
-              -Dinstanto.ci.baseline=state-repo/baseline.json \
-              -Dinstanto.ci.plan=artifacts/plan-artifacts/plan.json \
-              -Dinstanto.ci.artifactsDir=artifacts \
-              -Dinstanto.ci.out=state-repo/baseline.json \
+              "-Dinstanto.ci.catalog=$GITHUB_WORKSPACE/tooling/.github/downstream-projects.json" \
+              "-Dinstanto.ci.baseline=$GITHUB_WORKSPACE/state-repo/baseline.json" \
+              "-Dinstanto.ci.plan=$GITHUB_WORKSPACE/artifacts/plan-artifacts/plan.json" \
+              "-Dinstanto.ci.artifactsDir=$GITHUB_WORKSPACE/artifacts" \
+              "-Dinstanto.ci.out=$GITHUB_WORKSPACE/state-repo/baseline.json" \
               ${compat_args[@]+"${compat_args[@]}"}
           fi
 

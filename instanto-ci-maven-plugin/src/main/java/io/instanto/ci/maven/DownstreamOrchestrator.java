@@ -390,7 +390,7 @@ public final class DownstreamOrchestrator {
     return revision;
   }
 
-  public static List<String> fastSkipFlags(Collection<String> existing, boolean skipJacoco) {
+  public static List<String> fastSkipFlags(Collection<String> existing, boolean skipCoverage) {
     Set<String> existingKeys = new LinkedHashSet<>();
     for (String arg : existing) {
       int eq = arg.indexOf('=');
@@ -399,8 +399,9 @@ public final class DownstreamOrchestrator {
     List<String> candidates = new ArrayList<>();
     candidates.add("-Dspotbugs.skip=true");
     candidates.add("-Dspotless.skip=true");
-    if (skipJacoco) {
+    if (skipCoverage) {
       candidates.add("-Djacoco.skip=true");
+      candidates.add("-Dteacoco.skip=true");
     }
     List<String> flags = new ArrayList<>();
     for (String flag : candidates) {

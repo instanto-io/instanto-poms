@@ -52,6 +52,19 @@ class DownstreamAndNightlyTest {
   }
 
   @Test
+  void skipCoverageIncludesBothJvmAndBrowserReports() {
+    List<String> flags = DownstreamOrchestrator.fastSkipFlags(List.of(), true);
+    assertTrue(flags.containsAll(List.of("-Djacoco.skip=true", "-Dteacoco.skip=true")));
+
+    flags = DownstreamOrchestrator.fastSkipFlags(List.of(), false);
+    assertFalse(flags.contains("-Djacoco.skip=true"));
+    assertFalse(flags.contains("-Dteacoco.skip=true"));
+
+    flags = DownstreamOrchestrator.fastSkipFlags(List.of("-Dteacoco.skip=false"), true);
+    assertFalse(flags.contains("-Dteacoco.skip=true"));
+  }
+
+  @Test
   void loadsRealCatalogComputesAffectedClosureAndTarjanGroups() throws Exception {
     DownstreamOrchestrator orchestrator = new DownstreamOrchestrator();
     Path catalogPath =
